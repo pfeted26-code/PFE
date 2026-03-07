@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:myapp/screens/test_theme/login.dart' show LoginScreen;
-import 'screens/test_theme/test_appbar.dart';
-import 'screens/test_theme/test_bottomsheet.dart';
-import 'screens/test_theme/test_button.dart';
-import 'screens/test_theme/test_checkbox.dart';
-import 'screens/test_theme/test_formfield.dart';
-import 'screens/test_theme/test_showdialog.dart';
-import 'screens/test_theme/test_text.dart';
-import 'utils/theme/theme.dart';
+import 'package:EduNex/screens/Auth/forget.dart' ;
+import 'package:EduNex/screens/Auth/login.dart' ;
+import 'package:EduNex/screens/test_theme/test_appbar.dart';
+import 'package:EduNex/screens/test_theme/test_bottomsheet.dart';
+import 'package:EduNex/screens/test_theme/test_button.dart';
+import 'package:EduNex/screens/test_theme/test_checkbox.dart';
+import 'package:EduNex/screens/test_theme/test_formfield.dart';
+import 'package:EduNex/screens/test_theme/test_showdialog.dart';
+import 'package:EduNex/screens/test_theme/test_text.dart';
+import 'package:EduNex/utils/theme/theme.dart';
 
 void main() {
   runApp(const MyApp());
@@ -29,3 +30,5 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+
+
