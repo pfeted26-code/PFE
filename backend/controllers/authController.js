@@ -1,17 +1,24 @@
-const User = require('../models/userSchema');
-const nodemailer = require('nodemailer');
-const bcrypt = require('bcrypt');
+const User = require("../models/userSchema");
+const nodemailer = require("nodemailer");
+const bcrypt = require("bcrypt");
 
 // 1. FORGOT PASSWORD — Send secure code
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
     const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "Aucun utilisateur trouvé avec cet email." });
+    if (!user)
+      return res
+        .status(404)
+        .json({ message: "Aucun utilisateur trouvé avec cet email." });
 
     // Generate 8 random characters for reset code
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
-    const resetCode = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    const chars =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    const resetCode = Array.from(
+      { length: 8 },
+      () => chars[Math.floor(Math.random() * chars.length)],
+    ).join("");
 
     // Store code + expiration + attempt counter
     user.resetCode = resetCode;
@@ -21,14 +28,14 @@ exports.forgotPassword = async (req, res) => {
 
     // Send email
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      service: "gmail",
       auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
     });
 
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: user.email,
-      subject: '🔒 Réinitialisation de votre mot de passe',
+      subject: "🔒 Réinitialisation de votre mot de passe",
       html: `
         <div style="font-family: Arial; max-width: 600px; margin:auto; background:#f9f9f9; padding:20px; border-radius:10px;">
           <h2 style="text-align:center; color:#4F46E5;">EduNex</h2>
@@ -44,11 +51,14 @@ exports.forgotPassword = async (req, res) => {
     });
 
     console.log(`Code envoyé à ${user.email}: ${resetCode}`);
-    res.status(200).json({ message: "Code de réinitialisation envoyé par email." });
-
+    res
+      .status(200)
+      .json({ message: "Code de réinitialisation envoyé par email." });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Erreur lors de la demande de réinitialisation." });
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la demande de réinitialisation." });
   }
 };
 
@@ -57,30 +67,35 @@ exports.resetPassword = async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
     const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "Utilisateur introuvable." });
+    if (!user)
+      return res.status(404).json({ message: "Utilisateur introuvable." });
 
     // Check code & expiration
     if (!user.resetCode || user.resetCodeExpires < Date.now()) {
-      return res.status(400).json({ message: "Le code a expiré ou est invalide." });
+      return res
+        .status(400)
+        .json({ message: "Le code a expiré ou est invalide." });
     }
 
     // Limit attempts
     if (user.resetAttempts >= 5) {
-      return res.status(429).json({ message: "Trop de tentatives. Veuillez redemander un nouveau code." });
+      return res.status(429).json({
+        message: "Trop de tentatives. Veuillez redemander un nouveau code.",
+      });
     }
 
     // Case-insensitive comparison for code
-    if (user.resetCode.toUpperCase() !== code.toUpperCase()) {
-      user.resetAttempts += 1;
-      await user.save();
+    const cleanCode = code.trim();
+
+    if (!cleanCode || user.resetCode !== cleanCode) {
       return res.status(400).json({ message: "Code incorrect." });
     }
-
     // Password complexity check (add more rules as needed)
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])/;
     if (!passwordRegex.test(newPassword)) {
       return res.status(400).json({
-        message: "Le mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule, un chiffre et un caractère spécial.",
+        message:
+          "Le mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule, un chiffre et un caractère spécial.",
       });
     }
 
@@ -95,14 +110,14 @@ exports.resetPassword = async (req, res) => {
 
     // Confirmation email
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      service: "gmail",
       auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
     });
 
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: user.email,
-      subject: '✅ Mot de passe réinitialisé avec succès',
+      subject: "✅ Mot de passe réinitialisé avec succès",
       html: `
         <div style="font-family: Arial; max-width: 600px; margin:auto; background:#f3f4f6; padding:20px; border-radius:10px; text-align:center;">
           <h2 style="color:#4F46E5;">EduNex</h2>
@@ -114,10 +129,53 @@ exports.resetPassword = async (req, res) => {
       `,
     });
 
-    res.status(200).json({ message: "Mot de passe réinitialisé avec succès et email de confirmation envoyé !" });
-
+    res.status(200).json({
+      message:
+        "Mot de passe réinitialisé avec succès et email de confirmation envoyé !",
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Erreur lors de la réinitialisation du mot de passe." });
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la réinitialisation du mot de passe." });
+  }
+};
+// 2. VERIFY CODE — Check if code is valid BEFORE reset
+exports.verifyCode = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user)
+      return res.status(404).json({ message: "Utilisateur introuvable." });
+
+    // Check expiration
+    if (!user.resetCode || user.resetCodeExpires < Date.now()) {
+      return res
+        .status(400)
+        .json({ message: "Le code a expiré ou est invalide." });
+    }
+
+    // Limit attempts
+    if (user.resetAttempts >= 5) {
+      return res.status(429).json({
+        message: "Trop de tentatives. Veuillez redemander un nouveau code.",
+      });
+    }
+
+    // Check code
+    const cleanCode = code.trim();
+
+    if (!cleanCode || user.resetCode !== cleanCode) {
+      user.resetAttempts += 1;
+      await user.save();
+      return res.status(400).json({ message: "Code incorrect." });
+    }
+    return res.status(200).json({ message: "Code valide." });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la vérification du code." });
   }
 };

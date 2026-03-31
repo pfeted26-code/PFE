@@ -1,28 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '/services/auth_service.dart';
 import 'login.dart';
 
 
-// ─── Entry Point ──────────────────────────────────────────────────────────────
-
-void main() => runApp(const MyApp());
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Forgot Password',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(),
-      home: const ForgotPasswordScreen(),
-    );
-  }
-}
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
+// ─── Forgot Password Screen ───────────────────────────────────────────────────
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -33,9 +16,11 @@ class ForgotPasswordScreen extends StatefulWidget {
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     with TickerProviderStateMixin {
+
   int _step = 1; // 1=email  2=otp  3=new password
 
-  // Controllers & focus
+  // ── Controllers ──────────────────────────────────────────────────────────────
+
   final _emailController    = TextEditingController();
   final _emailFocus         = FocusNode();
   final _passwordController = TextEditingController();
@@ -43,12 +28,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   final _confirmController  = TextEditingController();
   final _confirmFocus       = FocusNode();
 
-  // OTP
+  // ── OTP ───────────────────────────────────────────────────────────────────────
+
   static const int _otpLength = 8;
   late final List<TextEditingController> _otpControllers;
   late final List<FocusNode>             _otpFocusNodes;
 
-  // State
+  // ── State ─────────────────────────────────────────────────────────────────────
+
   bool    _loading     = false;
   bool    _showPass    = false;
   bool    _showConfirm = false;
@@ -57,13 +44,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   String? _success;
   final Map<String, String> _fieldErrors = {};
 
-  // Animations
+  // ── Animations ────────────────────────────────────────────────────────────────
+
   late AnimationController _blob1;
   late AnimationController _blob2;
   late AnimationController _blob3;
   late AnimationController _slideCtrl;
   late Animation<double>   _slideAnim;
   late Animation<double>   _fadeAnim;
+
+  // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
   @override
   void initState() {
@@ -73,19 +63,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     _otpFocusNodes  = List.generate(_otpLength, (_) => FocusNode());
     for (final f in _otpFocusNodes) f.addListener(() => setState(() {}));
 
-    _blob1 = AnimationController(vsync: this, duration: const Duration(seconds: 4))
-      ..repeat(reverse: true);
-    _blob2 = AnimationController(vsync: this, duration: const Duration(seconds: 5))
-      ..repeat(reverse: true);
-    _blob3 = AnimationController(vsync: this, duration: const Duration(seconds: 6))
-      ..repeat(reverse: true);
+    _blob1 = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat(reverse: true);
+    _blob2 = AnimationController(vsync: this, duration: const Duration(seconds: 5))..repeat(reverse: true);
+    _blob3 = AnimationController(vsync: this, duration: const Duration(seconds: 6))..repeat(reverse: true);
 
-    _slideCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 380));
-    _slideAnim = Tween<double>(begin: 48, end: 0).animate(
-        CurvedAnimation(parent: _slideCtrl, curve: Curves.easeOutCubic));
-    _fadeAnim  = Tween<double>(begin: 0, end: 1).animate(
-        CurvedAnimation(parent: _slideCtrl, curve: Curves.easeOut));
+    _slideCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
+    _slideAnim = Tween<double>(begin: 48, end: 0).animate(CurvedAnimation(parent: _slideCtrl, curve: Curves.easeOutCubic));
+    _fadeAnim  = Tween<double>(begin: 0,  end: 1).animate(CurvedAnimation(parent: _slideCtrl, curve: Curves.easeOut));
 
     _slideCtrl.forward();
   }
@@ -102,7 +86,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     super.dispose();
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────────
 
   void _transition(VoidCallback action) {
     _slideCtrl.reverse().then((_) {
@@ -141,13 +125,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     _fieldErrors.remove('password');
     final pass    = _passwordController.text;
     final confirm = _confirmController.text;
-    final regex   = RegExp(
-        r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$');
+    final regex   = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$');
     if (pass.isEmpty) {
       _fieldErrors['password'] = 'Password is required';
     } else if (!regex.hasMatch(pass)) {
-      _fieldErrors['password'] =
-          'Min 8 chars, uppercase, lowercase, number & special character';
+      _fieldErrors['password'] = 'Min 8 chars, uppercase, lowercase, number & special character';
     } else if (pass != confirm) {
       _fieldErrors['password'] = 'Passwords do not match';
     }
@@ -155,29 +137,70 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     return !_fieldErrors.containsKey('password');
   }
 
-  // ── Handlers ──────────────────────────────────────────────────────────────────
+  // ── API Handlers ──────────────────────────────────────────────────────────────
 
   Future<void> _handleSendCode() async {
     if (!_validateEmail()) return;
     setState(() { _loading = true; _error = null; _success = null; });
-    await Future.delayed(const Duration(milliseconds: 1200));
-    setState(() { _loading = false; _success = 'Verification code sent! Check your inbox.'; });
-    await Future.delayed(const Duration(milliseconds: 1000));
-    _transition(() => setState(() => _step = 2));
+
+    try {
+      // AuthService calls POST /users/forgot-password
+      final result = await AuthService.instance.forgotPassword(
+        email: _emailController.text.trim(),
+      );
+
+      setState(() {
+        _loading = false;
+        _success = result.message.isNotEmpty
+            ? result.message
+            : 'Verification code sent! Check your inbox.';
+      });
+
+      await Future.delayed(const Duration(milliseconds: 1500));
+      if (!mounted) return;
+      _transition(() => setState(() => _step = 2));
+
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _error   = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
   }
 
   Future<void> _handleVerifyCode() async {
     if (!_validateOtp()) return;
+    // Same as web: just move to step 3 — real verification happens at reset time
     setState(() { _error = null; _success = 'Code verified successfully!'; });
     await Future.delayed(const Duration(milliseconds: 900));
+    if (!mounted) return;
     _transition(() => setState(() => _step = 3));
   }
 
   Future<void> _handleResetPassword() async {
     if (!_validatePassword()) return;
     setState(() { _loading = true; _error = null; _success = null; });
-    await Future.delayed(const Duration(milliseconds: 1400));
-    setState(() { _loading = false; _success = 'Password reset successfully!'; _done = true; });
+
+    try {
+      // AuthService calls POST /users/reset-password
+      final result = await AuthService.instance.resetPassword(
+        email:       _emailController.text.trim(),
+        code:        _otpValue,
+        newPassword: _passwordController.text,
+      );
+
+      setState(() {
+        _loading = false;
+        _success = result.message.isNotEmpty ? result.message : 'Password reset successfully!';
+        _done    = true;
+      });
+
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _error   = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
   }
 
   void _handleBack() {
@@ -229,7 +252,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     return Scaffold(
       body: Stack(
         children: [
-          // ── Background — identical to login ──
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -239,29 +261,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
               ),
             ),
           ),
-
-          // ── Blobs — identical to login ──
-          _AnimatedBlob(
-            controller: _blob1,
-            alignment: const Alignment(-0.5, -0.5),
-            colors: const [Color(0x4D7C3AED), Color(0x4D2563EB), Color(0x4D0891B2)],
-          ),
-          _AnimatedBlob(
-            controller: _blob2,
-            alignment: const Alignment(0.5, 0.5),
-            colors: const [Color(0x4DDC2626), Color(0x4D7C3AED), Color(0x4D2563EB)],
-          ),
-          _AnimatedBlob(
-            controller: _blob3,
-            alignment: Alignment.center,
-            colors: const [Color(0x330891B2), Color(0x332563EB)],
-            size: 700,
-          ),
-
-          // ── Grid — identical to login ──
+          _AnimatedBlob(controller: _blob1, alignment: const Alignment(-0.5, -0.5),
+              colors: const [Color(0x4D7C3AED), Color(0x4D2563EB), Color(0x4D0891B2)]),
+          _AnimatedBlob(controller: _blob2, alignment: const Alignment(0.5, 0.5),
+              colors: const [Color(0x4DDC2626), Color(0x4D7C3AED), Color(0x4D2563EB)]),
+          _AnimatedBlob(controller: _blob3, alignment: Alignment.center,
+              colors: const [Color(0x330891B2), Color(0x332563EB)], size: 700),
           CustomPaint(painter: _GridPainter(), size: Size.infinite),
-
-          // ── Content ──
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
@@ -283,7 +289,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  // ── Card — identical structure to login ──────────────────────────────────────
+  // ── Card ──────────────────────────────────────────────────────────────────────
 
   Widget _buildCard() {
     return Container(
@@ -291,17 +297,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: const Color(0x801E293B), width: 1),
         gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
           colors: [Color(0x990F172A), Color(0x990F172A)],
         ),
         boxShadow: const [
-          BoxShadow(
-            color: Color(0x337C3AED),
-            blurRadius: 60,
-            spreadRadius: -10,
-            offset: Offset(0, 20),
-          ),
+          BoxShadow(color: Color(0x337C3AED), blurRadius: 60, spreadRadius: -10, offset: Offset(0, 20)),
         ],
       ),
       child: ClipRRect(
@@ -309,8 +309,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         child: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
               colors: [Color(0x1A7C3AED), Colors.transparent, Color(0x1A0891B2)],
             ),
           ),
@@ -321,22 +320,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
               children: [
                 _buildHeader(),
                 const SizedBox(height: 28),
-                if (_error != null) ...[
-                  _Alert(message: _error!, isError: true),
-                  const SizedBox(height: 16),
-                ],
-                if (_success != null) ...[
-                  _Alert(message: _success!, isError: false),
-                  const SizedBox(height: 16),
-                ],
-                if (_done)
-                  _buildDoneState()
-                else if (_step == 1)
-                  _buildStep1()
-                else if (_step == 2)
-                  _buildStep2()
-                else
-                  _buildStep3(),
+                if (_error   != null) ...[_Alert(message: _error!,   isError: true),  const SizedBox(height: 16)],
+                if (_success != null) ...[_Alert(message: _success!, isError: false), const SizedBox(height: 16)],
+                if (_done)          _buildDoneState()
+                else if (_step == 1) _buildStep1()
+                else if (_step == 2) _buildStep2()
+                else                 _buildStep3(),
                 const SizedBox(height: 24),
                 _buildFooter(),
               ],
@@ -347,20 +336,17 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  // ── Header ───────────────────────────────────────────────────────────────────
+  // ── Header ────────────────────────────────────────────────────────────────────
 
   Widget _buildHeader() {
     return Column(
       children: [
-        // Icon — same size & shadow as login logo
         Container(
-          width: 96,
-          height: 96,
+          width: 96, height: 96,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
             gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
               colors: [Color(0xFF7C3AED), Color(0xFF2563EB), Color(0xFF0891B2)],
             ),
             boxShadow: const [
@@ -377,52 +363,36 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(24),
                     gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+                      begin: Alignment.topLeft, end: Alignment.bottomRight,
                       colors: [Colors.white.withOpacity(0.2), Colors.transparent],
                     ),
                   ),
                 ),
               ),
-              Icon(
-                _icon,
-                size: 46,
-                color: Colors.white,
-                shadows: const [Shadow(color: Colors.white38, blurRadius: 12)],
-              ),
+              Icon(_icon, size: 46, color: Colors.white,
+                  shadows: const [Shadow(color: Colors.white38, blurRadius: 12)]),
             ],
           ),
         ),
 
         const SizedBox(height: 20),
 
-        // Title — same ShaderMask gradient as login
         ShaderMask(
           shaderCallback: (b) => const LinearGradient(
             colors: [Color(0xFFC084FC), Color(0xFF60A5FA), Color(0xFF22D3EE)],
           ).createShader(b),
-          child: Text(
-            _title,
-            style: const TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-              letterSpacing: -0.5,
-            ),
-          ),
+          child: Text(_title,
+            style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.5)),
         ),
 
         const SizedBox(height: 8),
 
-        Text(
-          _subtitle,
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 15, color: Colors.white.withOpacity(0.5)),
-        ),
+        Text(_subtitle, textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 15, color: Colors.white.withOpacity(0.5))),
 
         const SizedBox(height: 20),
 
-        // Step progress dots
+        // Progress dots
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(3, (i) {
@@ -436,8 +406,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(4),
                 gradient: (active || done)
-                    ? const LinearGradient(
-                        colors: [Color(0xFF7C3AED), Color(0xFF0891B2)])
+                    ? const LinearGradient(colors: [Color(0xFF7C3AED), Color(0xFF0891B2)])
                     : null,
                 color: (active || done) ? null : Colors.white.withOpacity(0.15),
               ),
@@ -448,7 +417,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  // ── Step 1: Email ─────────────────────────────────────────────────────────────
+  // ── Step 1 ────────────────────────────────────────────────────────────────────
 
   Widget _buildStep1() {
     return Column(
@@ -482,18 +451,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         _buildSecondaryButton(
           label: 'Back to Login',
           icon: Icons.arrow_back_rounded,
-          onPressed: (){
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const LoginScreen()),
-            );
-           },
+          onPressed: () => Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => const LoginScreen())),
         ),
       ],
     );
   }
 
-  // ── Step 2: OTP ───────────────────────────────────────────────────────────────
+  // ── Step 2 ────────────────────────────────────────────────────────────────────
 
   Widget _buildStep2() {
     return Column(
@@ -501,10 +466,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
       children: [
         const _FieldLabel(label: 'Verification Code'),
         const SizedBox(height: 4),
-        Text(
-          'Code sent to: ${_emailController.text.trim()}',
-          style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.4)),
-        ),
+        Text('Code sent to: ${_emailController.text.trim()}',
+            style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.4))),
         const SizedBox(height: 16),
         _buildOtpRow(),
         if (_fieldErrors['otp'] != null) ...[
@@ -518,11 +481,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           onPressed: _handleVerifyCode,
         ),
         const SizedBox(height: 12),
-        _buildSecondaryButton(
-          label: 'Back',
-          icon: Icons.arrow_back_rounded,
-          onPressed: _handleBack,
-        ),
+        _buildSecondaryButton(label: 'Back', icon: Icons.arrow_back_rounded, onPressed: _handleBack),
       ],
     );
   }
@@ -550,55 +509,43 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                   ? const Color(0xFF7C3AED).withOpacity(0.1)
                   : const Color(0xFF1E293B).withOpacity(0.5),
               boxShadow: focused
-                  ? [BoxShadow(
-                      color: const Color(0xFF7C3AED).withOpacity(0.2),
-                      blurRadius: 8,
-                    )]
+                  ? [BoxShadow(color: const Color(0xFF7C3AED).withOpacity(0.2), blurRadius: 8)]
                   : null,
             ),
             child: Theme(
               data: Theme.of(context).copyWith(
                 inputDecorationTheme: const InputDecorationTheme(
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  filled: false,
+                  border: InputBorder.none, enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none, filled: false,
                 ),
               ),
               child: Center(
                 child: TextField(
-                controller: _otpControllers[i],
-                focusNode: _otpFocusNodes[i],
-                textAlign: TextAlign.center,
-                maxLength: 1,
-                keyboardType: TextInputType.text,
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
-                ],
-                style: TextStyle(
-                  color: focused ? const Color(0xFFC084FC) : const Color(0xFFE2E8F0),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
+                  controller: _otpControllers[i],
+                  focusNode: _otpFocusNodes[i],
+                  textAlign: TextAlign.center,
+                  maxLength: 1,
+                  keyboardType: TextInputType.text,
+                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]'))],
+                  style: TextStyle(
+                    color: focused ? const Color(0xFFC084FC) : const Color(0xFFE2E8F0),
+                    fontSize: 16, fontWeight: FontWeight.w700,
+                  ),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none, enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none, disabledBorder: InputBorder.none,
+                    errorBorder: InputBorder.none, focusedErrorBorder: InputBorder.none,
+                    filled: false, counterText: '',
+                    contentPadding: EdgeInsets.symmetric(vertical: 14),
+                    isDense: false,
+                  ),
+                  onChanged: (val) {
+                    setState(() {});
+                    if (val.isNotEmpty && i < _otpLength - 1) _otpFocusNodes[i + 1].requestFocus();
+                    if (val.isEmpty   && i > 0)               _otpFocusNodes[i - 1].requestFocus();
+                  },
+                  onTap: () => setState(() {}),
                 ),
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  disabledBorder: InputBorder.none,
-                  errorBorder: InputBorder.none,
-                  focusedErrorBorder: InputBorder.none,
-                  filled: false,
-                  counterText: '',
-                  contentPadding: EdgeInsets.symmetric(vertical: 14),
-                  isDense: false,
-                ),
-                onChanged: (val) {
-                  setState(() {});
-                  if (val.isNotEmpty && i < _otpLength - 1) _otpFocusNodes[i + 1].requestFocus();
-                  if (val.isEmpty && i > 0)                 _otpFocusNodes[i - 1].requestFocus();
-                },
-                onTap: () => setState(() {}),
-              ),
               ),
             ),
           ),
@@ -607,7 +554,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  // ── Step 3: New Password ──────────────────────────────────────────────────────
+  // ── Step 3 ────────────────────────────────────────────────────────────────────
 
   Widget _buildStep3() {
     return Column(
@@ -624,10 +571,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           focusColor: const Color(0xFFC084FC),
           suffixIcon: GestureDetector(
             onTap: () => setState(() => _showPass = !_showPass),
-            child: Icon(
-              _showPass ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-              size: 20, color: Colors.white38,
-            ),
+            child: Icon(_showPass ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                size: 20, color: Colors.white38),
           ),
           onSubmitted: (_) => _confirmFocus.requestFocus(),
           onChanged: (_) => setState(() => _fieldErrors.remove('password')),
@@ -647,10 +592,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           focusColor: const Color(0xFF34D399),
           suffixIcon: GestureDetector(
             onTap: () => setState(() => _showConfirm = !_showConfirm),
-            child: Icon(
-              _showConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-              size: 20, color: Colors.white38,
-            ),
+            child: Icon(_showConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                size: 20, color: Colors.white38),
           ),
           onSubmitted: (_) => _handleResetPassword(),
           onChanged: (_) => setState(() => _fieldErrors.remove('password')),
@@ -663,10 +606,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         ],
 
         const SizedBox(height: 6),
-        Text(
-          'Min 8 chars · uppercase · lowercase · number · special character',
-          style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.3)),
-        ),
+        Text('Min 8 chars · uppercase · lowercase · number · special character',
+            style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.3))),
 
         const SizedBox(height: 24),
         _buildPrimaryButton(
@@ -676,72 +617,49 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           loading: _loading,
         ),
         const SizedBox(height: 12),
-        _buildSecondaryButton(
-          label: 'Back',
-          icon: Icons.arrow_back_rounded,
-          onPressed: _handleBack,
-        ),
+        _buildSecondaryButton(label: 'Back', icon: Icons.arrow_back_rounded, onPressed: _handleBack),
       ],
     );
   }
 
-  // ── Done State ────────────────────────────────────────────────────────────────
+  // ── Done ──────────────────────────────────────────────────────────────────────
 
   Widget _buildDoneState() {
     return Column(
       children: [
         const SizedBox(height: 8),
         Container(
-          width: 72,
-          height: 72,
+          width: 72, height: 72,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [Color(0xFF059669), Color(0xFF10B981)],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF10B981).withOpacity(0.45),
-                blurRadius: 28,
-                spreadRadius: 2,
-              ),
-            ],
+            gradient: const LinearGradient(colors: [Color(0xFF059669), Color(0xFF10B981)]),
+            boxShadow: [BoxShadow(color: const Color(0xFF10B981).withOpacity(0.45), blurRadius: 28, spreadRadius: 2)],
           ),
           child: const Icon(Icons.check_rounded, color: Colors.white, size: 36),
         ),
         const SizedBox(height: 16),
-        const Text(
-          'All done!',
-          style: TextStyle(
-            fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white,
-          ),
-        ),
+        const Text('All done!',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
         const SizedBox(height: 8),
-        Text(
-          'Your password has been reset successfully.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 15, color: Colors.white.withOpacity(0.5)),
-        ),
+        Text('Your password has been reset successfully.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 15, color: Colors.white.withOpacity(0.5))),
         const SizedBox(height: 24),
         _buildPrimaryButton(
           label: 'Back to Login',
           icon: Icons.login_rounded,
-          onPressed: () {
-             Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const LoginScreen()),
-            );
-          },
+          onPressed: () => Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => const LoginScreen())),
         ),
       ],
     );
   }
 
-  // ── Buttons — identical to login ─────────────────────────────────────────────
+  // ── Buttons ───────────────────────────────────────────────────────────────────
 
   Widget _buildPrimaryButton({
-    required String label,
-    required IconData icon,
+    required String    label,
+    required IconData  icon,
     required VoidCallback? onPressed,
     bool loading = false,
   }) {
@@ -752,16 +670,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           gradient: onPressed != null
-              ? const LinearGradient(
-                  colors: [Color(0xFF7C3AED), Color(0xFF2563EB), Color(0xFF0891B2)])
+              ? const LinearGradient(colors: [Color(0xFF7C3AED), Color(0xFF2563EB), Color(0xFF0891B2)])
               : null,
           color: onPressed == null ? Colors.white12 : null,
           boxShadow: onPressed != null
-              ? [BoxShadow(
-                  color: const Color(0xFF7C3AED).withOpacity(0.4),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                )]
+              ? [BoxShadow(color: const Color(0xFF7C3AED).withOpacity(0.4), blurRadius: 20, offset: const Offset(0, 8))]
               : null,
         ),
         child: ElevatedButton(
@@ -773,21 +686,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           child: loading
-              ? const SizedBox(
-                  width: 22, height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    valueColor: AlwaysStoppedAnimation(Colors.white),
-                  ),
-                )
+              ? const SizedBox(width: 22, height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.5, valueColor: AlwaysStoppedAnimation(Colors.white)))
               : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(icon, size: 18),
                     const SizedBox(width: 8),
-                    Text(label,
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600)),
+                    Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                   ],
                 ),
         ),
@@ -796,8 +702,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   }
 
   Widget _buildSecondaryButton({
-    required String label,
-    required IconData icon,
+    required String    label,
+    required IconData  icon,
     required VoidCallback? onPressed,
   }) {
     return SizedBox(
@@ -816,15 +722,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           children: [
             Icon(icon, size: 17, color: Colors.white60),
             const SizedBox(width: 8),
-            Text(label,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+            Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
           ],
         ),
       ),
     );
   }
 
-  // ── Footer — same divider style as login ─────────────────────────────────────
+  // ── Footer ────────────────────────────────────────────────────────────────────
 
   Widget _buildFooter() {
     return Stack(
@@ -837,22 +742,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
             color: const Color(0xFF0F172A).withOpacity(0.9),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Text(
-            _footerNote.toUpperCase(),
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1.2,
-              color: Colors.white.withOpacity(0.3),
-            ),
-          ),
+          child: Text(_footerNote.toUpperCase(),
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
+                letterSpacing: 1.2, color: Colors.white.withOpacity(0.3))),
         ),
       ],
     );
   }
 }
 
-// ─── Shared Widgets — copied verbatim from login page ────────────────────────
+// ─── Shared Widgets ───────────────────────────────────────────────────────────
 
 class _StyledTextField extends StatefulWidget {
   final TextEditingController controller;
@@ -891,8 +790,7 @@ class _StyledTextFieldState extends State<_StyledTextField> {
   @override
   void initState() {
     super.initState();
-    widget.focusNode.addListener(
-        () => setState(() => _focused = widget.focusNode.hasFocus));
+    widget.focusNode.addListener(() => setState(() => _focused = widget.focusNode.hasFocus));
   }
 
   @override
@@ -902,17 +800,12 @@ class _StyledTextFieldState extends State<_StyledTextField> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: _focused
-              ? widget.focusColor.withOpacity(0.7)
-              : Colors.white.withOpacity(0.1),
+          color: _focused ? widget.focusColor.withOpacity(0.7) : Colors.white.withOpacity(0.1),
           width: _focused ? 1.5 : 1,
         ),
         color: const Color(0xFF1E293B).withOpacity(0.5),
         boxShadow: _focused
-            ? [BoxShadow(
-                color: widget.focusColor.withOpacity(0.15),
-                blurRadius: 12,
-              )]
+            ? [BoxShadow(color: widget.focusColor.withOpacity(0.15), blurRadius: 12)]
             : null,
       ),
       child: TextField(
@@ -930,19 +823,13 @@ class _StyledTextFieldState extends State<_StyledTextField> {
           prefixIcon: Padding(
             padding: const EdgeInsets.only(left: 14, right: 10),
             child: IconTheme(
-              data: IconThemeData(
-                color: _focused ? widget.focusColor : Colors.white38,
-                size: 20,
-              ),
+              data: IconThemeData(color: _focused ? widget.focusColor : Colors.white38, size: 20),
               child: widget.prefixIcon,
             ),
           ),
           prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
           suffixIcon: widget.suffixIcon != null
-              ? Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: widget.suffixIcon,
-                )
+              ? Padding(padding: const EdgeInsets.only(right: 12), child: widget.suffixIcon)
               : null,
           suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -959,15 +846,9 @@ class _FieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: Colors.white.withOpacity(0.9),
-        letterSpacing: 0.2,
-      ),
-    );
+    return Text(label,
+      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+          color: Colors.white.withOpacity(0.9), letterSpacing: 0.2));
   }
 }
 
@@ -981,12 +862,7 @@ class _FieldError extends StatelessWidget {
       children: [
         const Icon(Icons.error_outline, size: 14, color: Color(0xFFF87171)),
         const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            message,
-            style: const TextStyle(fontSize: 12, color: Color(0xFFF87171)),
-          ),
-        ),
+        Expanded(child: Text(message, style: const TextStyle(fontSize: 12, color: Color(0xFFF87171)))),
       ],
     );
   }
@@ -1013,26 +889,15 @@ class _Alert extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            isError ? Icons.error_outline : Icons.check_circle_outline,
-            size: 18, color: icon,
-          ),
+          Icon(isError ? Icons.error_outline : Icons.check_circle_outline, size: 18, color: icon),
           const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(
-                fontSize: 13, fontWeight: FontWeight.w500, color: text,
-              ),
-            ),
-          ),
+          Expanded(child: Text(message,
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: text))),
         ],
       ),
     );
   }
 }
-
-// ─── Animated Blob — identical to login ──────────────────────────────────────
 
 class _AnimatedBlob extends StatelessWidget {
   final AnimationController controller;
@@ -1070,21 +935,13 @@ class _AnimatedBlob extends StatelessWidget {
   }
 }
 
-// ─── Grid Painter — identical to login ───────────────────────────────────────
-
 class _GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color       = Colors.white.withOpacity(0.02)
-      ..strokeWidth = 1;
+    final paint = Paint()..color = Colors.white.withOpacity(0.02)..strokeWidth = 1;
     const spacing = 100.0;
-    for (double x = 0; x < size.width;  x += spacing) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (double y = 0; y < size.height; y += spacing) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
+    for (double x = 0; x < size.width;  x += spacing) canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    for (double y = 0; y < size.height; y += spacing) canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
   }
 
   @override

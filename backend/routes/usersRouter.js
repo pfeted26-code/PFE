@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const userController = require("../controllers/userController");
 const uploadfile = require("../middlewares/images");
-const { forgotPassword, resetPassword } = require("../controllers/authController");
+const { forgotPassword, resetPassword , verifyCode } = require("../controllers/authController");
 const { requireAuthUser } = require("../middlewares/authMiddlewares");
 const { ControledAcces } = require("../middlewares/AccessControllers");
 
@@ -28,5 +28,7 @@ router.get("/me", requireAuthUser, userController.getUserAuth);
 
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password", resetPassword);
+router.post("/verify-code", verifyCode);
+
 
 module.exports = router;

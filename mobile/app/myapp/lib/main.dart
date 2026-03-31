@@ -29,7 +29,7 @@ class MyApp extends StatelessWidget {
       themeMode: ThemeMode.system,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      home: const AdminProfileScreen(),
+      home: const LoginScreen(),
     );
   }
 }

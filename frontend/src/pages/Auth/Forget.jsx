@@ -133,17 +133,44 @@ export default function ForgotPasswordFlow() {
   };
 
   const handleVerifyCode = async () => {
-    setError("");
-    setSuccess("");
+  setError("");
+  setSuccess("");
 
-    if (!validateCode()) return;
+  if (!validateCode()) return;
+
+  setLoading(true);
+
+  try {
+    const response = await fetch(`${API_URL}/verify-code`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: email.trim(),
+        code: code.trim(),
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message);
+    }
 
     setSuccess("Code verified successfully!");
+
     setTimeout(() => {
       setStep(3);
       setSuccess("");
     }, 1000);
-  };
+
+  } catch (err) {
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleResetPassword = async () => {
     setError("");
