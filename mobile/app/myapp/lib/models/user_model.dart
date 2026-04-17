@@ -55,19 +55,20 @@ class UserModel {
 
   // ── Deserialization ───────────────────────────────────────────────────────────
   factory UserModel.fromJson(Map<String, dynamic> json) {
-    final id = json['_id'] ?? json['id'] ?? '';
-    final role = json['role'] ?? 'etudiant';
+    final id = json['_id']?.toString() ?? json['id']?.toString() ?? '';
+    final roleRaw = json['role'];
+    final role = (roleRaw is String ? roleRaw : roleRaw?.toString()) ?? 'etudiant';
 
     return UserModel(
-      id: id as String? ?? '',
-      prenom: json['prenom'] as String? ?? '',
-      nom: json['nom'] as String? ?? '',
-      sexe: json['sexe'] as String? ?? 'Unknown',
-      email: json['email'] as String? ?? '',
-      role: json['role'] as String? ?? 'etudiant',
-      imageUser: json['image_User'],
-      verified: json['verified'] as bool? ?? false,
-      status: json['Status'] as bool? ?? false,
+      id: id,
+      prenom: (json['prenom'] as String?)?.isNotEmpty == true ? json['prenom'] as String : '',
+      nom: (json['nom'] as String?)?.isNotEmpty == true ? json['nom'] as String : '',
+      sexe: _safeString(json['sexe'], 'Unknown'),
+      email: (json['email'] as String?)?.isNotEmpty == true ? json['email'] as String : '',
+      role: role,
+      imageUser: _safeString(json['image_User']),
+      verified: _parseBool(json['verified']),
+      status: _parseBool(json['Status']),
 
       // Role-based fields
       numTel: _parseString(json['NumTel']),
@@ -82,6 +83,18 @@ class UserModel {
       classes: _parseStringList(json['classes']),
       adminCode: _parseString(json['adminCode']),
     );
+  }
+
+  static String _safeString(dynamic v, [String defaultVal = '']) {
+    if (v == null) return defaultVal;
+    if (v == 'null') return defaultVal;
+    return v.toString().trim();
+  }
+
+  static bool _parseBool(dynamic v) {
+    if (v == null) return false;
+    final s = v.toString().toLowerCase().trim();
+    return s == 'true' || s == '1';
   }
 
   // ── Serialization ─────────────────────────────────────────────────────────────

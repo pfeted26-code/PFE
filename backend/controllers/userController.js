@@ -281,7 +281,8 @@ module.exports.getUserById = async (req, res) => {
 module.exports.updateUserById = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = { ...req.body };
+const updateData = { ...req.body };
+    if (req.file) updateData.image_User = req.file.filename;
 
     // Convert IDs
     if (updateData.classe)

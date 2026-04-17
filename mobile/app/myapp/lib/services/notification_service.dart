@@ -7,9 +7,16 @@ class NotificationService {
   static final NotificationService instance = NotificationService._();
 
   // Get user notifications
-  Future<List<NotificationModel>> getNotifications() async {
+Future<List<NotificationModel>> getNotifications() async {
     return ApiService.instance.getList(
       '/notifications',
+      NotificationModel.fromJson,
+    );
+  }
+
+  Future<List<NotificationModel>> getByUser(String userId) async {
+    return ApiService.instance.getList(
+      '/notifications/user/$userId',
       NotificationModel.fromJson,
     );
   }
