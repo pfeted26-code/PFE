@@ -9,6 +9,7 @@ import '../Sidebars/StudentSidebar.dart';
 import '../../models/user_model.dart';
 import '../../services/notification_service.dart';
 import '../../models/notification_model.dart';
+import 'notifications.dart';
 
 const String _apiBase = 'http://192.168.1.109:5000';
 
@@ -67,11 +68,10 @@ class _StudentLayoutState extends State<StudentLayout> {
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
-  @override
+@override
   void initState() {
     super.initState();
     _loadStudent();
-    _fetchNotifications();
   }
 
   // ── Data ───────────────────────────────────────────────────────────────────
@@ -114,22 +114,27 @@ Future<void> _fetchNotifications() async {
     setState(() => _loadingNotifs = true);
     try {
       if (_user?.id != null) {
-        final notifications = await NotificationService.instance.getNotifications();
+        print('Fetching notifications for user: ${_user!.id}');
+        final notifications = await NotificationService.instance.getByUser(_user!.id!);
+        print('Got ${notifications.length} notifications');
         _notifications = notifications.map((n) => _Notif(
           id: n.id,
-          message: '${n.titre}: ${n.message}',
+          message: '${n.titre ?? "Notification"}: ${n.message ?? ''}',
           date: _formatDate(n.createdAt),
           unread: !n.lu,
         )).toList();
-        setState(() {});
+        if (mounted) setState(() {});
+      } else {
+        print('No user ID for notifications');
       }
     } catch (e) {
-      debugPrint('Notifications error: $e');
+      print('Notifications error: $e');
       setState(() => _notifications = []);
     } finally {
       if (mounted) setState(() => _loadingNotifs = false);
     }
   }
+
 
   String _formatDate(DateTime date) {
     final diff = DateTime.now().difference(date);
@@ -182,7 +187,7 @@ Future<void> _fetchNotifications() async {
       case 'announcements': return const Center(child: Text('Announcements'));
       case 'requests':      return const Center(child: Text('Requests'));
       case 'messages':      return const Center(child: Text('Messages'));
-      case 'notifications': return const Center(child: Text('Notifications'));
+case 'notifications': return NotificationsPage();
       case 'chatbot':       return const Center(child: Text('EduBot'));
       case 'profile':       return const Center(child: Text('Profile'));
       default:              return const Center(child: Text('Dashboard'));

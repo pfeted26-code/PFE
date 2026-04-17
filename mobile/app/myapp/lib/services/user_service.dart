@@ -25,7 +25,7 @@ class UserService {
   // Get current profile (like web getUserAuth)
   Future<UserModel> getProfile() async {
     return ApiService.instance.get(
-      '/users/profile',
+      '/users/me',
       UserModel.fromJson,
     );
   }

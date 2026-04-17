@@ -3,7 +3,8 @@
 
 class NotificationModel {
   final String id;
-  final String titre;
+  final String? titre;
+
   final String message;
   final String type; // 'announcement', 'grade', 'presence', etc.
   final String userId;
@@ -23,12 +24,13 @@ class NotificationModel {
   factory NotificationModel.fromJson(Map<String, dynamic> json) {
     return NotificationModel(
       id: json['_id'] ?? json['id'] ?? '',
-      titre: json['titre'] as String,
-      message: json['message'] as String,
-      type: json['type'] as String,
-      userId: json['user'] as String,
-      lu: json['lu'] as bool? ?? false,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      titre: json['titre']?.toString(),
+
+      message: json['message']?.toString() ?? '',
+      type: json['type']?.toString() ?? 'default',
+      userId: json['user']?.toString() ?? '',
+      lu: json['lu']?.toString().toLowerCase() == 'true' ?? false,
+      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
     );
   }
 
