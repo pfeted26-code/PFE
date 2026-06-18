@@ -11,7 +11,7 @@ class _NavItem {
 }
 
 const _navItems = [
-  _NavItem(path: '',              label: 'Dashboard',     icon: Icons.dashboard_rounded),
+  _NavItem(path: 'dashboard',              label: 'Dashboard',     icon: Icons.dashboard_rounded),
   _NavItem(path: 'courses',       label: 'courses',       icon: Icons.menu_book_rounded),
   _NavItem(path: 'timetable',     label: 'Timetable',     icon: Icons.calendar_month_rounded),
   _NavItem(path: 'exams',         label: 'Exams & Notes', icon: Icons.description_rounded),

@@ -7,6 +7,38 @@ import 'storage_service.dart';
 class ApiService {
   ApiService._();
 
+  // Add this method inside your existing ApiService class.
+// It is required because the backend toggle-pin route uses PATCH.
+
+Future<T> patch<T>(
+  String path,
+  Map<String, dynamic> body,
+  T Function(Map<String, dynamic>) fromJson,
+) async {
+  final Map<String, String> headers = await _getAuthHeaders();
+
+  final http.Response response = await http.patch(
+    Uri.parse('$_baseUrl$path'),
+    headers: headers,
+    body: jsonEncode(body),
+  );
+
+  _checkResponse(response);
+
+  if (response.body.trim().isEmpty) {
+    return fromJson(<String, dynamic>{});
+  }
+
+  final dynamic data = jsonDecode(response.body);
+
+  if (data is! Map) {
+    throw Exception('Invalid object response from $path');
+  }
+
+  return fromJson(Map<String, dynamic>.from(data));
+}
+
+
   static final ApiService instance = ApiService._();
 
   // Physical Android phone:

@@ -14,7 +14,9 @@ import 'courses.dart';
 import 'exams.dart';
 import 'timetable.dart';
 import 'student_demandes_page.dart';
-
+import 'student_announcements_page.dart';
+import 'student_attendance_page.dart';
+import 'student_dashboard_page.dart';
 
 const String _apiBase = 'http://192.168.1.211:5000';
 //const String _apiBase = 'http://10.0.2.2:5000'; // for emulator
@@ -202,10 +204,16 @@ class _StudentLayoutState extends State<StudentLayout> {
       case 'exams':
         return const StudentExamsScreen();
       case 'attendance':
-        return const Center(child: Text('Attendance'));
+        return StudentAttendancePage(studentId: _user?.id);
+
 
       case 'announcements':
-        return const Center(child: Text('Announcements'));
+        return const StudentAnnouncementsPage();
+
+      //dashboard case
+      case 'dashboard':
+        return const StudentDashboardPage();
+        
       case 'requests':
         return StudentDemandesPage(studentId: _user?.id);
       case 'messages':

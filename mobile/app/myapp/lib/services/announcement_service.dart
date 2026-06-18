@@ -1,66 +1,112 @@
 import '../models/announcement_model.dart';
 import 'api_service.dart';
 
-// ─── AnnouncementService ────────────────────────────────────────────────────────
 class AnnouncementService {
   AnnouncementService._();
-  static final AnnouncementService instance = AnnouncementService._();
 
-  // Get all announcements
+  static final AnnouncementService instance =
+      AnnouncementService._();
+
   Future<List<AnnouncementModel>> getAllAnnouncements() async {
-    return ApiService.instance.getList(
-      '/announcements',
-      AnnouncementModel.fromJson,
+    final dynamic response = await ApiService.instance.getRaw(
+      '/announcement',
     );
+
+    return _parseAnnouncementList(response);
   }
 
-  // Get user announcements
   Future<List<AnnouncementModel>> getMyAnnouncements() async {
-    return ApiService.instance.getList(
-      '/announcements/my-announcements',
-      AnnouncementModel.fromJson,
+    final dynamic response = await ApiService.instance.getRaw(
+      '/announcement/my-announcements',
     );
+
+    return _parseAnnouncementList(response);
   }
 
-  // Get by ID
-  Future<AnnouncementModel> getAnnouncementById(String id) async {
+  Future<AnnouncementModel> getAnnouncementById(
+    String id,
+  ) {
     return ApiService.instance.get(
-      '/announcements/$id',
+      '/announcement/$id',
       AnnouncementModel.fromJson,
     );
   }
 
-  // Create announcement (admin)
-  Future<AnnouncementModel> createAnnouncement(Map<String, dynamic> data) async {
+  Future<AnnouncementModel> createAnnouncement(
+    Map<String, dynamic> data,
+  ) {
     return ApiService.instance.post(
-      '/announcements',
+      '/announcement',
       data,
       AnnouncementModel.fromJson,
     );
   }
 
-  // Update
-  Future<AnnouncementModel> updateAnnouncement(String id, Map<String, dynamic> data) async {
+  Future<AnnouncementModel> updateAnnouncement(
+    String id,
+    Map<String, dynamic> data,
+  ) {
     return ApiService.instance.put(
-      '/announcements/$id',
+      '/announcement/$id',
       data,
       AnnouncementModel.fromJson,
     );
   }
 
-  // Delete
   Future<void> deleteAnnouncement(String id) async {
     await ApiService.instance.delete('/announcements/$id');
   }
 
-  // Mark as viewed
   Future<void> markAsViewed(String id) async {
-    await ApiService.instance.post('/announcements/$id/view', {}, (json) => json);
+    await ApiService.instance.post<Map<String, dynamic>>(
+      '/announcement/$id/view',
+      <String, dynamic>{},
+      (Map<String, dynamic> json) => json,
+    );
   }
 
-  // Toggle pin
   Future<void> togglePin(String id) async {
-    await ApiService.instance.delete('/announcements/$id/toggle-pin');
+    await ApiService.instance.patch<Map<String, dynamic>>(
+      '/announcement/$id/toggle-pin',
+      <String, dynamic>{},
+      (Map<String, dynamic> json) => json,
+    );
+  }
+
+  List<AnnouncementModel> _parseAnnouncementList(
+    dynamic response,
+  ) {
+    late final List<dynamic> list;
+
+    if (response is List) {
+      list = response;
+    } else if (response is Map) {
+      final dynamic wrapped =
+          response['announcements'] ??
+          response['annonces'] ??
+          response['data'] ??
+          response['results'];
+
+      if (wrapped is List) {
+        list = wrapped;
+      } else {
+        throw Exception(
+          'Invalid announcements response from server',
+        );
+      }
+    } else {
+      throw Exception(
+        'Invalid announcements response from server',
+      );
+    }
+
+    return list
+        .whereType<Map>()
+        .map(
+          (Map item) => AnnouncementModel.fromJson(
+            Map<String, dynamic>.from(item),
+          ),
+        )
+        .toList();
   }
 }
-

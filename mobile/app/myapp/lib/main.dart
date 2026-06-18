@@ -10,6 +10,9 @@ import 'screens/student/course_details.dart';
 import 'screens/student/exams.dart';
 import 'screens/student/timetable.dart';
 import 'screens/student/student_demandes_page.dart';
+import 'screens/student/student_announcements_page.dart';
+import 'screens/student/student_attendance_page.dart';
+import 'screens/student/student_dashboard_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -36,7 +39,11 @@ class MyApp extends StatelessWidget {
         '/course-details': (context) => const StudentCourseDetailsScreen(courseId: '',),
         '/exams': (context) => const StudentExamsScreen(),
         '/timetable': (context) => const StudentTimetableScreen(),
-        '/requests': (context) => const StudentDemandesPage(),     
+        '/requests': (context) => const StudentDemandesPage(), 
+        '/announcements': (context) => const StudentAnnouncementsPage(),
+        '/attendance': (context) => const StudentAttendancePage(),
+        '/dashboard': (context) => const StudentDashboardPage(),
+    
          },
     );
   }

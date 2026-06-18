@@ -8,10 +8,10 @@ import 'package:url_launcher/url_launcher.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // IMPORTANT
 // Android emulator: use http://10.0.2.2:5000
-// Real phone: replace with your laptop IP, example http://192.168.1.15:5000
+// Real phone: replace with your laptop IP, example http://192.168.1.211:5000
 // ─────────────────────────────────────────────────────────────────────────────
 
-const String kBaseUrl = 'http://10.0.2.2:5000';
+const String kBaseUrl = 'http://192.168.1.211:5000';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dark React-style colors
