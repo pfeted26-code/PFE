@@ -1,42 +1,263 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
+import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  BookOpen,
+  CalendarDays,
+  Clock3,
+  GraduationCap,
+  Megaphone,
+  RefreshCw,
+  School,
+  ShieldCheck,
+  TrendingUp,
+  Users,
+} from "lucide-react";
+
 import { useTheme } from "../../contexts/ThemeContext";
 import { getDashboardStats } from "../../services/dashboardService";
-import { useLocation } from "react-router-dom";
 
+const RANGE_OPTIONS = [
+  { value: "week", label: "Week" },
+  { value: "month", label: "Month" },
+  { value: "year", label: "Year" },
+];
+
+const STAT_ICONS = {
+  "Total Students": Users,
+  "Total Teachers": GraduationCap,
+  "Active Courses": BookOpen,
+  "Attendance Rate": Activity,
+};
+
+const SUMMARY_ITEMS = [
+  {
+    key: "totalAdmins",
+    label: "Administrators",
+    icon: ShieldCheck,
+    accent: "text-rose-600",
+    surface: "bg-rose-500/10",
+    description: "Platform administrators",
+  },
+  {
+    key: "totalClasses",
+    label: "Classes",
+    icon: School,
+    accent: "text-amber-600",
+    surface: "bg-amber-500/10",
+    description: "Active school classes",
+  },
+];
 
 export default function AdminDashboard() {
   const { theme } = useTheme();
   const location = useLocation();
+
+  const routerDashboardData = location.state?.dashboardData ?? null;
+
+  const initialDashboardData =
+    routerDashboardData?.dashboardType === "admin"
+      ? routerDashboardData
+      : null;
+
   const [timeRange, setTimeRange] = useState("week");
-  const [dashboardData, setDashboardData] = useState(location.state?.dashboardData || null);
-  const [loading, setLoading] = useState(!location.state?.dashboardData);
-  const [error, setError] = useState(null);
+  const [dashboardData, setDashboardData] = useState(initialDashboardData);
+  const [loading, setLoading] = useState(!initialDashboardData);
+  const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+
+  const isFirstLoad = useRef(true);
+
+  const isDark = theme === "dark";
+
+  const pageBackground = isDark
+    ? "bg-slate-950 text-slate-100"
+    : "bg-slate-50 text-slate-900";
+
+  const panelClass = isDark
+    ? "border-slate-800 bg-slate-900/90 shadow-black/20"
+    : "border-slate-200/80 bg-white shadow-slate-200/70";
+
+  const mutedText = isDark ? "text-slate-400" : "text-slate-500";
+  const softSurface = isDark ? "bg-slate-800/70" : "bg-slate-50";
+  const progressTrack = isDark ? "bg-slate-800" : "bg-slate-100";
+
+  const fetchDashboardData = async ({ silent = false } = {}) => {
+    try {
+      if (silent) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      setError("");
+
+      const data = await getDashboardStats(timeRange);
+
+      if (data?.dashboardType && data.dashboardType !== "admin") {
+        throw new Error(
+          `The returned dashboard is not an admin dashboard (${data.dashboardType}).`
+        );
+      }
+
+      setDashboardData(data ?? {});
+    } catch (err) {
+      console.error("Failed to fetch dashboard data:", err);
+
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Unable to load the administrator dashboard."
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    if (dashboardData) return;
-    const fetchDashboardData = async () => {
+    let isMounted = true;
+
+    const loadData = async () => {
       try {
-        setLoading(true);
-        const data = await getDashboardStats();
-        setDashboardData(data);
-      } catch (err) {
-        setError(err.message);
-        console.error("Failed to fetch dashboard data:", err);
-      } finally {
-        setLoading(false);
+        if (!isMounted) return;
+        await fetchDashboardData();
+      } catch {
+        // Errors are already handled in fetchDashboardData.
       }
     };
-    fetchDashboardData();
+
+    if (isFirstLoad.current && initialDashboardData) {
+      isFirstLoad.current = false;
+      setLoading(false);
+    } else {
+      isFirstLoad.current = false;
+      loadData();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [timeRange]);
+
+  const stats = Array.isArray(dashboardData?.stats)
+    ? dashboardData.stats
+    : [];
+
+  const enrollmentData = Array.isArray(dashboardData?.enrollmentData)
+    ? dashboardData.enrollmentData
+    : [];
+
+  const classPerformanceData = Array.isArray(
+    dashboardData?.classPerformanceData
+  )
+    ? dashboardData.classPerformanceData
+    : [];
+
+  const classAttendanceData = Array.isArray(
+    dashboardData?.classAttendanceData
+  )
+    ? dashboardData.classAttendanceData
+    : [];
+
+  const announcements = Array.isArray(dashboardData?.announcements)
+    ? dashboardData.announcements
+    : [];
+
+  const recentActivity = Array.isArray(dashboardData?.recentActivity)
+    ? dashboardData.recentActivity
+    : [];
+
+  const summary = dashboardData?.summary ?? {};
+
+  const normalizedEnrollmentData = useMemo(
+    () =>
+      enrollmentData.map((item) => ({
+        ...item,
+        count: Number(item?.count) || 0,
+      })),
+    [enrollmentData]
+  );
+
+  const maxCount = useMemo(
+    () =>
+      Math.max(
+        ...normalizedEnrollmentData.map((item) => item.count),
+        1
+      ),
+    [normalizedEnrollmentData]
+  );
+
+  const genderData = useMemo(() => {
+    const rawGenderData = dashboardData?.genderData ?? {};
+
+    const maleCount = Number(rawGenderData.maleCount) || 0;
+    const femaleCount = Number(rawGenderData.femaleCount) || 0;
+    const totalCount = maleCount + femaleCount;
+
+    let male = Number(rawGenderData.male);
+    let female = Number(rawGenderData.female);
+
+    if (!Number.isFinite(male)) {
+      male = totalCount > 0 ? (maleCount / totalCount) * 100 : 0;
+    }
+
+    if (!Number.isFinite(female)) {
+      female = totalCount > 0 ? (femaleCount / totalCount) * 100 : 0;
+    }
+
+    male = Math.max(0, Math.min(100, male));
+    female = Math.max(0, Math.min(100, female));
+
+    if (male + female > 100) {
+      const sum = male + female;
+      male = (male / sum) * 100;
+      female = (female / sum) * 100;
+    }
+
+    return {
+      male,
+      female,
+      maleCount,
+      femaleCount,
+    };
   }, [dashboardData]);
+
+  const totalStudents =
+    stats.find((stat) => stat?.title === "Total Students")?.value ??
+    summary.totalStudents ??
+    genderData.maleCount + genderData.femaleCount;
+
+  const circumference = 2 * Math.PI * 88;
+  const maleDash = (genderData.male / 100) * circumference;
+  const femaleDash = (genderData.female / 100) * circumference;
+
+  const formattedDate = new Intl.DateTimeFormat("en", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
 
   if (loading) {
     return (
-      <div className="min-h-screen p-6 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className={`text-lg ${theme === 'dark' ? 'text-gray-300' : 'text-slate-600'}`}>
-            Loading dashboard data...
-          </p>
+      <div className={`min-h-screen ${pageBackground}`}>
+        <div className="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-6">
+          <div className="text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 shadow-xl shadow-blue-500/20">
+              <RefreshCw className="h-7 w-7 animate-spin text-white" />
+            </div>
+
+            <h2 className="mt-5 text-xl font-bold">
+              Loading administration dashboard
+            </h2>
+
+            <p className={`mt-2 text-sm ${mutedText}`}>
+              Preparing statistics, classes, and recent activity…
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -44,385 +265,756 @@ export default function AdminDashboard() {
 
   if (error) {
     return (
-      <div className="min-h-screen p-6 flex items-center justify-center">
-        <div className="text-center">
-          <p className={`text-lg text-red-500 mb-4`}>Error loading dashboard: {error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+      <div className={`min-h-screen ${pageBackground}`}>
+        <div className="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-6">
+          <div
+            className={`w-full max-w-lg rounded-3xl border p-8 text-center shadow-xl ${panelClass}`}
           >
-            Retry
-          </button>
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10">
+              <AlertTriangle className="h-7 w-7 text-red-500" />
+            </div>
+
+            <h2 className="mt-5 text-2xl font-bold">Dashboard unavailable</h2>
+
+            <p className={`mt-3 text-sm leading-6 ${mutedText}`}>
+              {error}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => fetchDashboardData()}
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 transition hover:-translate-y-0.5"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Try again
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  const stats = dashboardData?.stats || [];
-  const enrollmentData = dashboardData?.enrollmentData || [];
-  const genderData = dashboardData?.genderData || { male: 0, female: 0 };
-  const classPerformanceData = dashboardData?.classPerformanceData || [];
-  const classAttendanceData = dashboardData?.classAttendanceData || [];
-  const announcements = dashboardData?.announcements || [];
-  const recentActivity = dashboardData?.recentActivity || [];
-
-  const maxCount = Math.max(...enrollmentData.map((d) => d.count), 1);
-
   return (
-    <div className="min-h-screen p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Admin Dashboard
-            </h1>
-            <p className={`mt-2 ${theme === 'dark' ? 'text-gray-300' : 'text-slate-600'}`}>
-              Welcome back, Administrator • {new Date().toLocaleDateString()}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            {["week", "month", "year"].map((range) => (
-              <button
-                key={range}
-                onClick={() => setTimeRange(range)}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                  timeRange === range
-                    ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg"
-                    : theme === 'dark' ? "bg-gray-700 text-gray-300 hover:bg-gray-600" : "bg-white text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {range.charAt(0).toUpperCase() + range.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
+    <main className={`min-h-screen ${pageBackground}`}>
+      <div className="mx-auto max-w-7xl space-y-6 px-4 py-5 sm:px-6 lg:px-8">
+        {/* Hero */}
+        <section className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-blue-700 via-indigo-700 to-violet-700 p-6 text-white shadow-2xl shadow-blue-900/20 sm:p-8">
+          <div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-white/10 blur-2xl" />
+          <div className="absolute -bottom-28 left-1/3 h-64 w-64 rounded-full bg-cyan-300/10 blur-3xl" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_38%)]" />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {stats.map((stat, index) => (
-            <div
-              key={index}
-              className={`relative rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden group cursor-pointer ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}
-            >
-              <div
-                className={`absolute inset-0 bg-gradient-to-br ${stat.color} opacity-0 group-hover:opacity-5 transition-opacity`}
-              ></div>
-              <div className="relative">
-                <div className="flex items-start justify-between mb-4">
-                  <div
-                    className={`p-3 rounded-xl bg-gradient-to-br ${stat.color} shadow-lg transform group-hover:scale-110 transition-transform text-2xl`}
-                  >
-                    {stat.icon}
-                  </div>
-                  <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-                    ↗ {stat.change}
-                  </div>
-                </div>
-                <p className={`text-sm font-medium mb-1 ${theme === 'dark' ? 'text-gray-300' : 'text-slate-600'}`}>
-                  {stat.title}
-                </p>
-                <p className={`text-3xl font-bold ${theme === 'dark' ? 'text-gray-100' : 'text-slate-800'}`}>
-                  {stat.value}
-                </p>
+          <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur">
+                <ShieldCheck className="h-4 w-4" />
+                Administration workspace
+              </div>
+
+              <h1 className="max-w-3xl text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
+                School management at a glance
+              </h1>
+
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-blue-100 sm:text-base">
+                Monitor users, classes, courses, attendance, and school activity
+                from one central dashboard.
+              </p>
+
+              <div className="mt-5 flex flex-wrap items-center gap-3 text-xs text-blue-100 sm:text-sm">
+                <span className="inline-flex items-center gap-2 rounded-full bg-black/10 px-3 py-2 backdrop-blur">
+                  <CalendarDays className="h-4 w-4" />
+                  {formattedDate}
+                </span>
+
+                <span className="inline-flex items-center gap-2 rounded-full bg-black/10 px-3 py-2 backdrop-blur">
+                  <Activity className="h-4 w-4" />
+                  Live administrative overview
+                </span>
               </div>
             </div>
-          ))}
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Combined Students and Teachers Chart */}
-          <div className={`lg:col-span-2 rounded-2xl p-6 shadow-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
-            <div className="mb-6">
-              <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-gray-100' : 'text-slate-800'}`}>
-                Total Enrollment
-              </h3>
-              <p className={`text-sm mt-1 ${theme === 'dark' ? 'text-gray-300' : 'text-slate-600'}`}>
-                Total students and teachers
-              </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex rounded-2xl border border-white/20 bg-white/10 p-1 backdrop-blur">
+                {RANGE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setTimeRange(option.value)}
+                    className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                      timeRange === option.value
+                        ? "bg-white text-indigo-700 shadow-lg"
+                        : "text-white/80 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => fetchDashboardData({ silent: true })}
+                disabled={refreshing}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold backdrop-blur transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+                />
+                Refresh
+              </button>
             </div>
-            <div className="h-64 flex items-end justify-center gap-8 px-4">
-              {enrollmentData.length > 0 ? enrollmentData.map((data, index) => {
-                const height = data.count > 0 ? Math.max((data.count / maxCount) * 100, 5) : 2;
-                const color = data.category === "Students" ? "from-blue-500 to-cyan-400" : "from-purple-500 to-pink-400";
-                return (
-                  <div key={index} className="flex flex-col items-center gap-2">
-                    <div className="w-16 flex items-end h-48">
-                      <div className="w-full relative group">
+          </div>
+        </section>
+
+        {/* Additional administration metrics */}
+        <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {SUMMARY_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const value = Number(summary[item.key]) || 0;
+
+            return (
+              <article
+                key={item.key}
+                className={`group relative overflow-hidden rounded-3xl border p-5 shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-xl ${panelClass}`}
+              >
+                <div
+                  className={`absolute -right-10 -top-10 h-32 w-32 rounded-full ${item.surface} blur-2xl`}
+                />
+
+                <div className="relative flex items-center gap-4">
+                  <div
+                    className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${item.surface}`}
+                  >
+                    <Icon className={`h-7 w-7 ${item.accent}`} />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-3xl font-black tracking-tight">
+                      {value}
+                    </p>
+
+                    <p className="mt-1 text-sm font-bold">
+                      {item.label}
+                    </p>
+
+                    <p className={`mt-1 text-xs ${mutedText}`}>
+                      {item.description}
+                    </p>
+                  </div>
+
+                  <BarChart3 className={`h-5 w-5 shrink-0 ${mutedText}`} />
+                </div>
+              </article>
+            );
+          })}
+        </section>
+
+        {/* Main statistics */}
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {stats.length > 0 ? (
+            stats.map((stat, index) => {
+              const Icon = STAT_ICONS[stat?.title] || BarChart3;
+
+              return (
+                <article
+                  key={stat?.title || index}
+                  className={`group relative overflow-hidden rounded-3xl border p-5 shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-xl ${panelClass}`}
+                >
+                  <div
+                    className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${
+                      stat?.color || "from-blue-500 to-violet-500"
+                    }`}
+                  />
+
+                  <div
+                    className={`absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br ${
+                      stat?.color || "from-blue-500 to-violet-500"
+                    } opacity-[0.08] blur-2xl`}
+                  />
+
+                  <div className="relative">
+                    <div className="flex items-start justify-between gap-4">
+                      <div
+                        className={`flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${
+                          stat?.color || "from-blue-500 to-violet-500"
+                        } shadow-lg`}
+                      >
+                        <Icon className="h-6 w-6 text-white" />
+                      </div>
+
+                      {String(stat?.change || "").trim() !== "" && (
+                        <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-600">
+                          ↗ {stat.change}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="mt-6 text-3xl font-black tracking-tight">
+                      {stat?.value ?? 0}
+                    </p>
+
+                    <p className={`mt-1 text-sm font-medium ${mutedText}`}>
+                      {stat?.title || "Statistic"}
+                    </p>
+
+                    <div className={`mt-5 h-1.5 overflow-hidden rounded-full ${progressTrack}`}>
+                      <div
+                        className={`h-full rounded-full bg-gradient-to-r ${
+                          stat?.color || "from-blue-500 to-violet-500"
+                        }`}
+                        style={{
+                          width:
+                            stat?.title === "Attendance Rate"
+                              ? `${Math.min(
+                                  100,
+                                  Number.parseFloat(stat?.value) || 0
+                                )}%`
+                              : "68%",
+                        }}
+                      />
+                    </div>
+                  </div>
+                </article>
+              );
+            })
+          ) : (
+            <EmptyPanel
+              className="sm:col-span-2 xl:col-span-4"
+              panelClass={panelClass}
+              mutedText={mutedText}
+              icon={BarChart3}
+              title="No statistics available"
+              text="Statistics will appear here once the backend returns data."
+            />
+          )}
+        </section>
+
+        {/* Charts */}
+        <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(340px,0.85fr)]">
+          <article className={`rounded-3xl border p-5 shadow-lg sm:p-6 ${panelClass}`}>
+            <PanelHeader
+              icon={BarChart3}
+              title="Enrollment overview"
+              subtitle="Current distribution between students and teachers"
+              mutedText={mutedText}
+              badge={timeRange}
+            />
+
+            {normalizedEnrollmentData.length > 0 ? (
+              <div className="mt-7">
+                <div
+                  className={`relative h-72 overflow-hidden rounded-2xl border p-5 ${
+                    isDark
+                      ? "border-slate-800 bg-slate-950/50"
+                      : "border-slate-100 bg-slate-50/80"
+                  }`}
+                >
+                  <div className="pointer-events-none absolute inset-0 flex flex-col justify-between px-5 py-8 opacity-70">
+                    {[100, 75, 50, 25, 0].map((value) => (
+                      <div key={value} className="flex items-center gap-3">
+                        <span className={`w-7 text-[10px] ${mutedText}`}>
+                          {value}%
+                        </span>
                         <div
-                          className={`w-full bg-gradient-to-t ${color} rounded-t-lg transition-all hover:opacity-80 cursor-pointer`}
-                          style={{ height: `${height}%` }}
+                          className={`h-px flex-1 ${
+                            isDark ? "bg-slate-800" : "bg-slate-200"
+                          }`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="relative z-10 flex h-full items-end justify-center gap-10 pl-10 sm:gap-16">
+                    {normalizedEnrollmentData.map((data, index) => {
+                      const height =
+                        data.count > 0
+                          ? Math.max((data.count / maxCount) * 100, 10)
+                          : 3;
+
+                      const isStudent =
+                        String(data?.category || "").toLowerCase() ===
+                        "students";
+
+                      const color = isStudent
+                        ? "from-blue-600 via-blue-500 to-cyan-400"
+                        : "from-violet-600 via-purple-500 to-fuchsia-400";
+
+                      return (
+                        <div
+                          key={data?.category || index}
+                          className="flex h-full min-w-[90px] flex-col items-center justify-end"
                         >
-                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                            {data.count}
+                          <div className="group relative flex h-[210px] w-20 items-end">
+                            <div
+                              className={`relative w-full rounded-t-2xl bg-gradient-to-t ${color} shadow-xl transition duration-500 group-hover:brightness-110`}
+                              style={{ height: `${height}%` }}
+                            >
+                              <span className="absolute -top-9 left-1/2 -translate-x-1/2 rounded-lg bg-slate-950 px-2.5 py-1 text-xs font-bold text-white opacity-0 shadow-lg transition group-hover:opacity-100">
+                                {data.count}
+                              </span>
+
+                              <div className="absolute inset-x-2 top-2 h-4 rounded-full bg-white/20 blur-sm" />
+                            </div>
                           </div>
+
+                          <p className="mt-3 text-sm font-bold">
+                            {data?.category || "Category"}
+                          </p>
+
+                          <p className={`mt-1 text-xs ${mutedText}`}>
+                            {data.count} registered
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  {normalizedEnrollmentData.map((item) => (
+                    <div
+                      key={item.category}
+                      className={`rounded-2xl p-4 ${softSurface}`}
+                    >
+                      <p className={`text-xs font-medium ${mutedText}`}>
+                        {item.category}
+                      </p>
+
+                      <div className="mt-2 flex items-end justify-between gap-3">
+                        <p className="text-2xl font-black">{item.count}</p>
+                        <span className="text-xs font-bold text-emerald-600">
+                          Active
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <EmptyState
+                icon={Users}
+                title="No enrollment data"
+                text="Student and teacher totals will be displayed here."
+                mutedText={mutedText}
+              />
+            )}
+          </article>
+
+          <article className={`rounded-3xl border p-5 shadow-lg sm:p-6 ${panelClass}`}>
+            <PanelHeader
+              icon={Users}
+              title="Gender distribution"
+              subtitle="Student demographic breakdown"
+              mutedText={mutedText}
+            />
+
+            <div className="mt-7 flex justify-center">
+              <div className="relative h-64 w-64">
+                <svg
+                  viewBox="0 0 224 224"
+                  className="h-full w-full -rotate-90"
+                  role="img"
+                  aria-label="Gender distribution chart"
+                >
+                  <circle
+                    cx="112"
+                    cy="112"
+                    r="88"
+                    fill="none"
+                    stroke={isDark ? "#1e293b" : "#e2e8f0"}
+                    strokeWidth="22"
+                  />
+
+                  {maleDash > 0 && (
+                    <circle
+                      cx="112"
+                      cy="112"
+                      r="88"
+                      fill="none"
+                      stroke="#2563eb"
+                      strokeWidth="22"
+                      strokeDasharray={`${maleDash} ${circumference}`}
+                      strokeDashoffset="0"
+                      strokeLinecap="round"
+                      className="transition-all duration-1000"
+                    />
+                  )}
+
+                  {femaleDash > 0 && (
+                    <circle
+                      cx="112"
+                      cy="112"
+                      r="88"
+                      fill="none"
+                      stroke="#ec4899"
+                      strokeWidth="22"
+                      strokeDasharray={`${femaleDash} ${circumference}`}
+                      strokeDashoffset={-maleDash}
+                      strokeLinecap="round"
+                      className="transition-all duration-1000"
+                    />
+                  )}
+                </svg>
+
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <p className="text-4xl font-black">{totalStudents}</p>
+                    <p className={`mt-1 text-xs font-semibold ${mutedText}`}>
+                      Total students
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <GenderCard
+                icon={Users}
+                label="Male"
+                percentage={genderData.male}
+                count={genderData.maleCount}
+                color="blue"
+                isDark={isDark}
+              />
+
+              <GenderCard
+                icon={Users}
+                label="Female"
+                percentage={genderData.female}
+                count={genderData.femaleCount}
+                color="pink"
+                isDark={isDark}
+              />
+            </div>
+          </article>
+        </section>
+
+        {/* Performance, attendance, announcements */}
+        <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <MetricListCard
+            panelClass={panelClass}
+            mutedText={mutedText}
+            progressTrack={progressTrack}
+            icon={TrendingUp}
+            title="Class performance"
+            subtitle="Average grades by class"
+            data={classPerformanceData}
+            valueKey="average"
+            fallbackColor="#2563eb"
+            emptyTitle="No performance data"
+          />
+
+          <MetricListCard
+            panelClass={panelClass}
+            mutedText={mutedText}
+            progressTrack={progressTrack}
+            icon={Activity}
+            title="Class attendance"
+            subtitle="Attendance rates by class"
+            data={classAttendanceData}
+            valueKey="attendance"
+            fallbackColor="#10b981"
+            emptyTitle="No attendance data"
+          />
+
+          <article className={`rounded-3xl border p-5 shadow-lg sm:p-6 ${panelClass}`}>
+            <PanelHeader
+              icon={Megaphone}
+              title="Announcements"
+              subtitle="Latest school updates"
+              mutedText={mutedText}
+              badge={`${announcements.length} new`}
+            />
+
+            <div className="mt-5 max-h-[360px] space-y-3 overflow-y-auto pr-1">
+              {announcements.length > 0 ? (
+                announcements.slice(0, 5).map((announcement, index) => (
+                  <div
+                    key={announcement?._id || announcement?.title || index}
+                    className={`group rounded-2xl border p-4 transition hover:-translate-y-0.5 ${
+                      isDark
+                        ? "border-slate-800 bg-slate-800/50 hover:bg-slate-800"
+                        : "border-slate-100 bg-slate-50 hover:bg-white hover:shadow-md"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-xl">
+                        {announcement?.icon || "📢"}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate text-sm font-bold">
+                          {announcement?.title || "Announcement"}
+                        </h3>
+
+                        <p className={`mt-1 line-clamp-2 text-xs leading-5 ${mutedText}`}>
+                          {announcement?.description || "No description"}
+                        </p>
+
+                        <div className={`mt-3 flex items-center gap-1.5 text-[11px] ${mutedText}`}>
+                          <Clock3 className="h-3.5 w-3.5" />
+                          {announcement?.date || "Recently"}
                         </div>
                       </div>
                     </div>
-                    <span className={`text-xs font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-slate-600'}`}>
-                      {data.category}
-                    </span>
                   </div>
-                );
-              }) : (
-                <div className="flex items-center justify-center w-full h-full">
-                  <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-slate-500'}`}>No enrollment data available</p>
-                </div>
+                ))
+              ) : (
+                <EmptyState
+                  icon={Megaphone}
+                  title="No announcements"
+                  text="Recent announcements will appear here."
+                  mutedText={mutedText}
+                />
               )}
             </div>
-            <div className="flex justify-center gap-6 mt-6">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"></div>
-                <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-slate-600'}`}>Students</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-400"></div>
-                <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-slate-600'}`}>Teachers</span>
-              </div>
-            </div>
-          </div>
-          {/* Gender Distribution */}
-          <div className={`rounded-2xl p-6 shadow-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
-            <div className="mb-6">
-              <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-gray-100' : 'text-slate-800'}`}>
-                Gender Distribution
-              </h3>
-              <p className={`text-sm mt-1 ${theme === 'dark' ? 'text-gray-300' : 'text-slate-600'}`}>Student demographics</p>
-            </div>
+          </article>
+        </section>
 
-            {/* Enhanced Pie Chart */}
-            <div className="flex justify-center mb-8">
-              <div className="relative w-56 h-56">
-                <svg viewBox="0 0 224 224" className="w-full h-full">
-                  {/* Background circle */}
-                  <circle
-                    cx="112"
-                    cy="112"
-                    r="100"
-                    fill="none"
-                    stroke={theme === 'dark' ? '#374151' : '#f1f5f9'}
-                    strokeWidth="8"
-                  />
+        {/* Activity */}
+        <section className={`rounded-3xl border p-5 shadow-lg sm:p-6 ${panelClass}`}>
+          <PanelHeader
+            icon={Clock3}
+            title="Recent system activity"
+            subtitle="Latest registrations and administrative updates"
+            mutedText={mutedText}
+            badge={`${recentActivity.length} events`}
+          />
 
-                  {/* Male segment */}
-                  <circle
-                    cx="112"
-                    cy="112"
-                    r="100"
-                    fill="none"
-                    stroke="#3b82f6"
-                    strokeWidth="24"
-                    strokeDasharray={`${Math.max((genderData.male / 100) * 628.32, 40)} 628.32`}
-                    strokeDashoffset="0"
-                    className="transition-all duration-1000 ease-out"
-                    transform="rotate(-90 112 112)"
-                  />
-
-                  {/* Female segment */}
-                  <circle
-                    cx="112"
-                    cy="112"
-                    r="100"
-                    fill="none"
-                    stroke="#ec4899"
-                    strokeWidth="24"
-                    strokeDasharray={`${Math.max((genderData.female / 100) * 628.32, 40)} 628.32`}
-                    strokeDashoffset={`${-(genderData.male / 100) * 628.32}`}
-                    className="transition-all duration-1000 ease-out"
-                    transform="rotate(-90 112 112)"
-                  />
-                </svg>
-
-                {/* Center content */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center">
-                    <p className={`text-2xl font-bold ${theme === 'dark' ? 'text-gray-100' : 'text-slate-800'}`}>
-                      {stats.find(s => s.title === "Total Students")?.value || "0"}
-                    </p>
-                    <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-slate-500'}`}>Total Students</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Statistics Cards */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className={`p-4 rounded-xl text-center transition-all hover:scale-105 ${theme === 'dark' ? 'bg-blue-900/20 border border-blue-700/30' : 'bg-blue-50 border border-blue-200'}`}>
-                <div className="flex items-center justify-center mb-2">
-                  <div className="w-4 h-4 rounded-full bg-blue-500 mr-2"></div>
-                  <span className={`text-sm font-semibold ${theme === 'dark' ? 'text-blue-300' : 'text-blue-700'}`}>Male</span>
-                </div>
-                <p className={`text-xl font-bold ${theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}`}>
-                  {genderData.male}%
-                </p>
-                <p className={`text-xs ${theme === 'dark' ? 'text-blue-300' : 'text-blue-600'}`}>
-                  {genderData.maleCount} students
-                </p>
-              </div>
-
-              <div className={`p-4 rounded-xl text-center transition-all hover:scale-105 ${theme === 'dark' ? 'bg-pink-900/20 border border-pink-700/30' : 'bg-pink-50 border border-pink-200'}`}>
-                <div className="flex items-center justify-center mb-2">
-                  <div className="w-4 h-4 rounded-full bg-pink-500 mr-2"></div>
-                  <span className={`text-sm font-semibold ${theme === 'dark' ? 'text-pink-300' : 'text-pink-700'}`}>Female</span>
-                </div>
-                <p className={`text-xl font-bold ${theme === 'dark' ? 'text-pink-400' : 'text-pink-600'}`}>
-                  {genderData.female}%
-                </p>
-                <p className={`text-xs ${theme === 'dark' ? 'text-pink-300' : 'text-pink-600'}`}>
-                  {genderData.femaleCount} students
-                </p>
-              </div>
-            </div>
-
-          
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Class Performance Chart */}
-          <div className={`rounded-2xl p-6 shadow-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
-            <div className="mb-6">
-              <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-gray-100' : 'text-slate-800'}`}>
-                Class Performance
-              </h3>
-              <p className={`text-sm mt-1 ${theme === 'dark' ? 'text-gray-300' : 'text-slate-600'}`}>
-                Average grades by class
-              </p>
-            </div>
-            <div className="space-y-4">
-              {classPerformanceData.map((data, index) => (
-                <div key={index} className="group">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-slate-700'}`}>
-                      {data.class}
-                    </span>
-                    <span className={`text-sm font-bold ${theme === 'dark' ? 'text-gray-100' : 'text-slate-800'}`}>
-                      {data.average}%
-                    </span>
-                  </div>
-                  <div className={`relative h-3 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-gray-700' : 'bg-slate-100'}`}>
-                    <div
-                      className="absolute top-0 left-0 h-full rounded-full transition-all duration-500 group-hover:opacity-80"
-                      style={{
-                        width: `${data.average}%`,
-                        backgroundColor: data.color
-                      }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Class Attendance Chart */}
-          <div className={`rounded-2xl p-6 shadow-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
-            <div className="mb-6">
-              <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-gray-100' : 'text-slate-800'}`}>
-                Class Attendance
-              </h3>
-              <p className={`text-sm mt-1 ${theme === 'dark' ? 'text-gray-300' : 'text-slate-600'}`}>
-                Attendance rates by class
-              </p>
-            </div>
-            <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
-              {classAttendanceData.length > 0 ? classAttendanceData.map((data, index) => (
-                <div key={index} className="group">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-200' : 'text-slate-700'}`}>
-                      {data.class}
-                    </span>
-                    <span className={`text-sm font-bold ${theme === 'dark' ? 'text-gray-100' : 'text-slate-800'}`}>
-                      {data.attendance}%
-                    </span>
-                  </div>
-                  <div className={`relative h-2 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-gray-700' : 'bg-slate-100'}`}>
-                    <div
-                      className="absolute top-0 left-0 h-full rounded-full transition-all duration-500 group-hover:opacity-80"
-                      style={{
-                        width: `${data.attendance}%`,
-                        backgroundColor: data.color
-                      }}
-                    ></div>
-                  </div>
-                </div>
-              )) : (
-                <div className="flex items-center justify-center h-32">
-                  <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-slate-500'}`}>No attendance data available</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Recent Announcements */}
-          <div className={`rounded-2xl p-6 shadow-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
-            <div className="mb-6">
-              <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-gray-100' : 'text-slate-800'}`}>
-                Recent Announcements
-              </h3>
-              <p className={`text-sm mt-1 ${theme === 'dark' ? 'text-gray-300' : 'text-slate-600'}`}>
-                Latest school updates
-              </p>
-            </div>
-            <div className="space-y-3 max-h-80 overflow-y-auto">
-              {announcements.map((announcement, index) => (
+          {recentActivity.length > 0 ? (
+            <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {recentActivity.slice(0, 8).map((activity, index) => (
                 <div
-                  key={index}
-                  className={`p-4 rounded-xl transition-all cursor-pointer ${
-                    theme === 'dark'
-                      ? 'bg-gray-700 hover:bg-gray-600'
-                      : 'bg-slate-50 hover:bg-slate-100'
+                  key={activity?._id || `${activity?.action}-${index}`}
+                  className={`group flex items-center gap-4 rounded-2xl border p-4 transition hover:-translate-y-0.5 ${
+                    isDark
+                      ? "border-slate-800 bg-slate-800/45 hover:bg-slate-800"
+                      : "border-slate-100 bg-slate-50 hover:bg-white hover:shadow-md"
                   }`}
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="text-2xl">{announcement.icon}</div>
-                    <div className="flex-1">
-                      <h4 className={`font-semibold mb-1 ${theme === 'dark' ? 'text-gray-100' : 'text-slate-800'}`}>
-                        {announcement.title}
-                      </h4>
-                      <p className={`text-sm mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-slate-600'}`}>
-                        {announcement.description}
-                      </p>
-                      <span className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-slate-500'}`}>
-                        {announcement.date}
-                      </span>
-                    </div>
+                  <div
+                    className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${
+                      activity?.color || "from-blue-500 to-violet-500"
+                    } text-xl shadow-lg`}
+                  >
+                    {activity?.icon || "⚙️"}
                   </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold">
+                      {activity?.action || "System activity"}
+                    </p>
+
+                    <p className={`mt-1 truncate text-xs ${mutedText}`}>
+                      {activity?.user || "System"}
+                    </p>
+                  </div>
+
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                      isDark
+                        ? "bg-slate-700 text-slate-300"
+                        : "bg-white text-slate-500 shadow-sm"
+                    }`}
+                  >
+                    {activity?.time || "Now"}
+                  </span>
                 </div>
               ))}
             </div>
-          </div>
+          ) : (
+            <EmptyState
+              icon={Clock3}
+              title="No recent activity"
+              text="New system events will appear here."
+              mutedText={mutedText}
+            />
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function PanelHeader({
+  icon: Icon,
+  title,
+  subtitle,
+  mutedText,
+  badge,
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 shadow-lg shadow-blue-500/15">
+          <Icon className="h-5 w-5 text-white" />
         </div>
 
-        <div className={`rounded-2xl p-6 shadow-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'}`}>
-          <div className="mb-6">
-            <h3 className={`text-xl font-bold ${theme === 'dark' ? 'text-gray-100' : 'text-slate-800'}`}>
-              Recent System Activity
-            </h3>
-            <p className={`text-sm mt-1 ${theme === 'dark' ? 'text-gray-300' : 'text-slate-600'}`}>
-              Latest updates and changes
-            </p>
-          </div>
-          <div className="space-y-4">
-            {recentActivity.map((activity, index) => (
-              <div
-                key={index}
-                className={`flex items-center gap-4 p-4 rounded-xl transition-colors cursor-pointer ${theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-slate-50'}`}
-              >
-                <div
-                  className={`p-3 rounded-xl bg-gradient-to-br ${activity.color} shadow-md text-2xl`}
-                >
-                  {activity.icon}
-                </div>
-                <div className="flex-1">
-                  <p className={`font-semibold ${theme === 'dark' ? 'text-gray-100' : 'text-slate-800'}`}>
-                    {activity.action}
-                  </p>
-                  <p className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-slate-600'}`}>{activity.user}</p>
-                </div>
-                <span className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-slate-500'}`}>{activity.time}</span>
-              </div>
-            ))}
-          </div>
+        <div>
+          <h2 className="text-lg font-black">{title}</h2>
+          <p className={`mt-1 text-xs ${mutedText}`}>{subtitle}</p>
         </div>
       </div>
+
+      {badge && (
+        <span className="rounded-full bg-blue-500/10 px-3 py-1 text-[11px] font-bold capitalize text-blue-600">
+          {badge}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function GenderCard({
+  icon: Icon,
+  label,
+  percentage,
+  count,
+  color,
+  isDark,
+}) {
+  const styles =
+    color === "pink"
+      ? {
+          box: isDark
+            ? "border-pink-500/20 bg-pink-500/10"
+            : "border-pink-100 bg-pink-50",
+          icon: "bg-pink-500/10 text-pink-600",
+          value: "text-pink-600",
+        }
+      : {
+          box: isDark
+            ? "border-blue-500/20 bg-blue-500/10"
+            : "border-blue-100 bg-blue-50",
+          icon: "bg-blue-500/10 text-blue-600",
+          value: "text-blue-600",
+        };
+
+  return (
+    <div className={`rounded-2xl border p-4 ${styles.box}`}>
+      <div className="flex items-center justify-between">
+        <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${styles.icon}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+
+        <span className={`text-xl font-black ${styles.value}`}>
+          {Number(percentage).toFixed(1)}%
+        </span>
+      </div>
+
+      <p className="mt-4 text-sm font-bold">{label}</p>
+      <p className="mt-1 text-xs opacity-70">{count} students</p>
+    </div>
+  );
+}
+
+function MetricListCard({
+  panelClass,
+  mutedText,
+  progressTrack,
+  icon,
+  title,
+  subtitle,
+  data,
+  valueKey,
+  fallbackColor,
+  emptyTitle,
+}) {
+  return (
+    <article className={`rounded-3xl border p-5 shadow-lg sm:p-6 ${panelClass}`}>
+      <PanelHeader
+        icon={icon}
+        title={title}
+        subtitle={subtitle}
+        mutedText={mutedText}
+      />
+
+      <div className="mt-6 max-h-[360px] space-y-5 overflow-y-auto pr-1">
+        {data.length > 0 ? (
+          data.map((item, index) => {
+            const value = Math.max(
+              0,
+              Math.min(100, Number(item?.[valueKey]) || 0)
+            );
+
+            return (
+              <div key={item?.class || index}>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold">
+                      {item?.class || "Unknown class"}
+                    </p>
+
+                    <p className={`mt-0.5 text-[11px] ${mutedText}`}>
+                      {value >= 80
+                        ? "Excellent"
+                        : value >= 60
+                        ? "Good"
+                        : "Needs attention"}
+                    </p>
+                  </div>
+
+                  <span className="rounded-full bg-blue-500/10 px-2.5 py-1 text-xs font-black text-blue-600">
+                    {value}%
+                  </span>
+                </div>
+
+                <div className={`h-2.5 overflow-hidden rounded-full ${progressTrack}`}>
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${value}%`,
+                      backgroundColor: item?.color || fallbackColor,
+                    }}
+                  />
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <EmptyState
+            icon={icon}
+            title={emptyTitle}
+            text="This information will appear when data becomes available."
+            mutedText={mutedText}
+          />
+        )}
+      </div>
+    </article>
+  );
+}
+
+function EmptyPanel({
+  className = "",
+  panelClass,
+  mutedText,
+  icon: Icon,
+  title,
+  text,
+}) {
+  return (
+    <div
+      className={`rounded-3xl border p-8 text-center shadow-lg ${panelClass} ${className}`}
+    >
+      <Icon className={`mx-auto h-10 w-10 ${mutedText}`} />
+      <p className="mt-4 font-bold">{title}</p>
+      <p className={`mt-1 text-sm ${mutedText}`}>{text}</p>
+    </div>
+  );
+}
+
+function EmptyState({
+  icon: Icon,
+  title,
+  text,
+  mutedText,
+}) {
+  return (
+    <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300/40 p-6 text-center">
+      <Icon className={`h-9 w-9 ${mutedText}`} />
+      <p className="mt-3 text-sm font-bold">{title}</p>
+      <p className={`mt-1 max-w-xs text-xs leading-5 ${mutedText}`}>
+        {text}
+      </p>
     </div>
   );
 }

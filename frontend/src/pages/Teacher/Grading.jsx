@@ -22,9 +22,11 @@ import {
   RefreshCw,
   Loader2
 } from 'lucide-react';
-import { getAllExamen } from '@/services/examenService';
+import { getAllExamen, createExamen } from '@/services/examenService';
 import { getAllNotes, createNote, updateNoteById } from '@/services/noteService';
 import { getUserAuth } from '@/services/userService';
+import { getAllCours } from '@/services/coursService';
+
 
 
 
@@ -53,6 +55,25 @@ export default function TeacherExams() {
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [createExamOpen, setCreateExamOpen] = useState(false);
+  const [createExamForm, setCreateExamForm] = useState({
+    nom: '',
+    description: '',
+    type: 'examen',
+    noteMax: 20,
+    duree: 60,
+    salle: '',
+    date: new Date().toISOString(),
+    // Backend requires coursId.
+    coursId: '',
+  });
+
+  const [teacherCours, setTeacherCours] = useState([]);
+
+
+
+  const [createExamLoading, setCreateExamLoading] = useState(false);
+
 
   // Fetch data from API
   const fetchData = async () => {
@@ -121,7 +142,18 @@ export default function TeacherExams() {
 
   useEffect(() => {
     fetchData();
+
+    // Preload teacher courses for the Create Exam dropdown
+    (async () => {
+      try {
+        const courses = await getAllCours();
+        setTeacherCours(Array.isArray(courses) ? courses : (courses?.data || []));
+      } catch (e) {
+        console.error("Failed to fetch teacher cours list:", e);
+      }
+    })();
   }, []);
+
 
   // Fetch current user
   useEffect(() => {
@@ -529,11 +561,126 @@ export default function TeacherExams() {
               <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            <Button size="lg">
+            <Button size="lg" onClick={() => setCreateExamOpen(true)}>
               <FileText className="h-4 w-4 mr-2" />
               Create Exam
             </Button>
           </div>
+
+          {createExamOpen && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <Card className="w-full max-w-lg">
+                <CardHeader>
+                  <CardTitle>Create Exam</CardTitle>
+                  <CardDescription>Fill exam details and submit</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Nom</label>
+                    <input
+                      value={createExamForm.nom}
+                      onChange={(e) => setCreateExamForm(prev => ({ ...prev, nom: e.target.value }))}
+                      className="w-full p-3 border rounded-md bg-background"
+                      placeholder="Exam name"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Description</label>
+                    <textarea
+                      value={createExamForm.description}
+                      onChange={(e) => setCreateExamForm(prev => ({ ...prev, description: e.target.value }))}
+                      className="w-full p-3 border rounded-md bg-background"
+                      rows={3}
+                      placeholder="Optional description"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Note Max</label>
+                      <input
+                        type="number"
+                        value={createExamForm.noteMax}
+                        onChange={(e) => setCreateExamForm(prev => ({ ...prev, noteMax: Number(e.target.value) }))}
+                        className="w-full p-3 border rounded-md bg-background"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Duration (min)</label>
+                      <input
+                        type="number"
+                        value={createExamForm.duree}
+                        onChange={(e) => setCreateExamForm(prev => ({ ...prev, duree: Number(e.target.value) }))}
+                        className="w-full p-3 border rounded-md bg-background"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Salle</label>
+                    <input
+                      value={createExamForm.salle}
+                      onChange={(e) => setCreateExamForm(prev => ({ ...prev, salle: e.target.value }))}
+                      className="w-full p-3 border rounded-md bg-background"
+                      placeholder="Room (optional)"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Course (cours)</label>
+                    <select
+                      className="w-full p-3 border rounded-md bg-background"
+                      value={createExamForm.coursId}
+                      onChange={(e) => setCreateExamForm(prev => ({ ...prev, coursId: e.target.value }))}
+                    >
+                      <option value="">Select a cours</option>
+                      {teacherCours.map(c => (
+                        <option key={c._id} value={c._id}>
+                          {c.nom}{c.code ? ` (${c.code})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" onClick={() => setCreateExamOpen(false)} disabled={createExamLoading}>
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={async () => {
+                        try {
+                          setCreateExamLoading(true);
+
+                          // Ensure backend-required coursId is provided
+                          if (!createExamForm.coursId) {
+                            showToast('Please select a cours before creating the exam', 'error');
+                            setCreateExamLoading(false);
+                            return;
+                          }
+
+                          await createExamen(createExamForm);
+
+                          showToast('Exam created successfully');
+                          setCreateExamOpen(false);
+                          setCreateExamLoading(false);
+                          await fetchData();
+                        } catch (e) {
+
+                          console.error('Error creating exam:', e);
+                          showToast('Failed to create exam', 'error');
+                          setCreateExamLoading(false);
+                        }
+                      }}
+                      disabled={createExamLoading || !createExamForm.nom}
+                    >
+                      {createExamLoading ? 'Creating...' : 'Create'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
 
         <div className="grid gap-6">

@@ -1,92 +1,182 @@
 // Backend/controllers/chat.controller.js
-const axios = require('axios');
-const mongoose = require('mongoose');
-const Conversation = require('../models/conversation');
+const axios = require("axios");
+const mongoose = require("mongoose");
+const Conversation = require("../models/conversation");
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:7000';
+const AI_SERVICE_URL =
+  process.env.AI_SERVICE_URL ||
+  "http://127.0.0.1:7000";
+
+const AI_REQUEST_TIMEOUT_MS =
+  Number(process.env.AI_REQUEST_TIMEOUT_MS) ||
+  180000;
 
 exports.chat = async (req, res) => {
+  const startedAt = Date.now();
+
   try {
-    const { message, conversationId, certificationId } = req.body;
-    
-    // ✅ Get userId from authenticated user (set by middleware)
-    const userId = req.user._id.toString();
-    
-    console.log('🔵 Backend chat controller');
-    console.log('📥 Authenticated user:', userId);
-    console.log('📥 User role:', req.user.role);
-    
+    const message = String(req.body?.message || "").trim();
+    const requestedConversationId = String(
+      req.body?.conversationId || ""
+    ).trim();
+    const certificationId = req.body?.certificationId;
+
+    const authenticatedUserId =
+      req.user?._id ||
+      req.user?.id;
+
+    if (!authenticatedUserId) {
+      return res.status(401).json({
+        success: false,
+        message: "User is not authenticated.",
+      });
+    }
+
     if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
+      return res.status(400).json({
+        success: false,
+        message: "Message is required.",
+      });
     }
 
-    const convId = conversationId || new mongoose.Types.ObjectId().toString();
+    const userId = authenticatedUserId.toString();
 
-    // ✅ GET TOKEN - Try multiple sources
-    let token = req.headers.authorization;
-    
-    // If not in headers, reconstruct from cookie
-    if (!token && req.cookies?.jwt) {
-      token = `Bearer ${req.cookies.jwt}`;
-    }
-    
-    console.log('📤 Token sources:');
-    console.log('  - Authorization header:', req.headers.authorization ? '✅' : '❌');
-    console.log('  - Cookie jwt:', req.cookies?.jwt ? '✅' : '❌');
-    console.log('📤 Final token:', token ? '✅ Present' : '❌ Missing');
-    
+    const conversationId =
+      requestedConversationId ||
+      new mongoose.Types.ObjectId().toString();
+
+    const authorizationHeader =
+      req.headers.authorization || "";
+
+    const cookieToken = req.cookies?.jwt
+      ? `Bearer ${req.cookies.jwt}`
+      : "";
+
+    const token =
+      authorizationHeader.startsWith("Bearer ")
+        ? authorizationHeader
+        : cookieToken;
+
     if (!token) {
-      return res.status(401).json({ error: 'Authentication token required' });
+      return res.status(401).json({
+        success: false,
+        message: "Authentication token required.",
+      });
     }
 
-    console.log(`🔵 Calling ai-service at ${AI_SERVICE_URL}/chat`);
+    console.log("🔵 Backend chat controller");
+    console.log("📥 Authenticated user:", userId);
+    console.log("📥 User role:", req.user?.role);
+    console.log(
+      `🔵 Calling AI service at ${AI_SERVICE_URL}/chat`
+    );
 
-    // 1️⃣ Call the AI service WITH TOKEN and userId
     const aiResponse = await axios.post(
       `${AI_SERVICE_URL}/chat`,
       {
         message,
         userId,
-        certificationId
+        certificationId,
       },
       {
         headers: {
-          'Authorization': token,  // ✅ Pass the token
-          'Content-Type': 'application/json'
+          Authorization: token,
+          "Content-Type": "application/json",
         },
-        timeout: 30000
+        timeout: AI_REQUEST_TIMEOUT_MS,
       }
     );
 
-    const answer = aiResponse.data.reply || aiResponse.data.answer || aiResponse.data;
+    const responseData = aiResponse.data || {};
 
-    // 2️⃣ Save conversation in DB
-    await Conversation.create({
-      userId,
-      conversationId: convId,
-      message,
-      response: typeof answer === 'string' ? answer : JSON.stringify(answer),
-      createdAt: new Date()
-    });
+    const answer =
+      typeof responseData === "string"
+        ? responseData
+        : responseData.answer ||
+          responseData.reply ||
+          responseData.response ||
+          responseData.message ||
+          responseData.content;
 
-    console.log('✅ Backend received ai-service response');
-    
-    // 3️⃣ Return AI response to frontend
-    res.json({ 
-      answer,
-      conversationId: convId 
-    });
-  } catch (err) {
-    console.error('❌ Backend chat error:', err.message);
-    if (err.response?.data) {
-      console.error('ai-service error:', err.response.data);
-    }
-    
-    if (!res.headersSent) {
-      res.status(err.response?.status || 500).json({ 
-        error: 'Chat service error',
-        details: err.response?.data || err.message
+    if (typeof answer !== "string" || !answer.trim()) {
+      console.error(
+        "❌ Invalid AI service response:",
+        responseData
+      );
+
+      return res.status(502).json({
+        success: false,
+        message: "The AI service returned an empty response.",
       });
     }
+
+    const cleanAnswer = answer.trim();
+
+    // Saving the conversation must never block the AI response.
+    try {
+      await Conversation.create({
+        userId,
+        conversationId,
+        message,
+        response: cleanAnswer,
+        createdAt: new Date(),
+      });
+
+      console.log("💾 Conversation saved successfully");
+    } catch (databaseError) {
+      console.error(
+        "⚠️ Conversation save failed, but the AI response will still be returned:",
+        databaseError?.message || databaseError
+      );
+    }
+
+    const durationMs = Date.now() - startedAt;
+
+    console.log(
+      `✅ Backend received AI response in ${durationMs} ms`
+    );
+
+    return res.status(200).json({
+      success: true,
+      answer: cleanAnswer,
+      reply: cleanAnswer,
+      response: cleanAnswer,
+      message: cleanAnswer,
+      conversationId,
+      durationMs,
+    });
+  } catch (error) {
+    console.error("❌ Backend chat error:", {
+      message: error?.message,
+      code: error?.code,
+      status: error?.response?.status,
+      data: error?.response?.data,
+    });
+
+    if (res.headersSent) {
+      return;
+    }
+
+    if (
+      error?.code === "ECONNABORTED" ||
+      error?.code === "ETIMEDOUT"
+    ) {
+      return res.status(504).json({
+        success: false,
+        message: "The AI service took too long to respond.",
+      });
+    }
+
+    return res.status(
+      error?.response?.status || 503
+    ).json({
+      success: false,
+      message:
+        error?.response?.data?.message ||
+        error?.response?.data?.details ||
+        error?.message ||
+        "Chat service error.",
+      details: error?.response?.data,
+    });
   }
 };

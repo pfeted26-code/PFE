@@ -1,350 +1,850 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import { useNavigate } from 'react-router-dom';
-import { getDashboardStats } from '@/services/dashboardService';
-import { getSeancesByEnseignant } from '@/services/seanceService';
-import { getNotificationsByUser } from '@/services/notificationService';
-import { ROUTES } from '@/constants/routes';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, BookOpen, ClipboardCheck, BarChart3, LogOut, Bell, Search, Calendar, TrendingUp, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Activity,
+  AlertCircle,
+  Award,
+  BarChart3,
+  Bell,
+  BookOpen,
+  CalendarDays,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardCheck,
+  Clock3,
+  GraduationCap,
+  Loader2,
+  LogOut,
+  Megaphone,
+  RefreshCw,
+  School,
+  TrendingUp,
+  UserCheck,
+  Users,
+} from "lucide-react";
 
+import { useAuth } from "@/hooks/useAuth";
+import { getDashboardStats } from "@/services/dashboardService";
+import { getNotificationsByUser } from "@/services/notificationService";
+import { ROUTES } from "@/constants/routes";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+
+const STAT_ICONS = {
+  "My Courses": BookOpen,
+  "My Classes": School,
+  "My Students": Users,
+  "Attendance Rate": Activity,
+};
+
+const QUICK_ACTIONS = [
+  {
+    title: "Grade Assignments",
+    description: "Review grades and student results.",
+    icon: ClipboardCheck,
+    color: "from-orange-500 to-red-500",
+    routeKey: "TEACHER_GRADING",
+  },
+  {
+    title: "Take Attendance",
+    description: "Record attendance for your classes.",
+    icon: UserCheck,
+    color: "from-blue-500 to-cyan-500",
+    routeKey: "TEACHER_ATTENDANCE",
+  },
+  {
+    title: "View Students",
+    description: "Consult students and their progress.",
+    icon: Users,
+    color: "from-violet-500 to-fuchsia-500",
+    routeKey: "TEACHER_STUDENTS",
+  },
+  {
+    title: "My Schedule",
+    description: "Open your weekly teaching schedule.",
+    icon: CalendarDays,
+    color: "from-emerald-500 to-teal-500",
+    routeKey: "TEACHER_SCHEDULE",
+  },
+];
 
 export default function TeacherDashboard() {
-  const [selectedClass, setSelectedClass] = useState(null);
-  const [stats, setStats] = useState([]);
-  const [todayClasses, setTodayClasses] = useState([]);
-  const [todaysSessions, setTodaysSessions] = useState([]);
-  const [recentActivity, setRecentActivity] = useState([]);
-  const [notificationCount, setNotificationCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  // Quick actions (counts will be dynamic if possible)
-  const teacherActions = [
-    {
-      title: 'Grade Assignments',
-      description: 'Review and grade pending submissions',
-      icon: ClipboardCheck,
-      color: 'from-orange-500 to-red-500',
-      // count: dynamic below
-    },
-    {
-      title: 'Take Attendance',
-      description: 'Mark attendance for today\'s classes',
-      icon: Users,
-      color: 'from-blue-500 to-cyan-500',
-      // count: dynamic below
-    },
-    {
-      title: 'View Students',
-      description: 'Manage student information and progress',
-      icon: Users,
-      color: 'from-purple-500 to-pink-500',
-    },
-    {
-      title: 'My Schedule',
-      description: 'View weekly teaching schedule',
-      icon: Calendar,
-      color: 'from-green-500 to-emerald-500',
-    },
-  ];
+  const [dashboardData, setDashboardData] = useState(null);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [selectedSession, setSelectedSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
-      setError(null);
-      try {
-        // Dashboard stats and activity
-        const dashboard = await getDashboardStats('teacher');
-        setStats(dashboard.stats?.map((stat) => {
-          // Map icon string to Lucide icon if possible
-          let icon = BookOpen;
-          if (stat.title?.toLowerCase().includes('student')) icon = Users;
-          if (stat.title?.toLowerCase().includes('teacher')) icon = Users;
-          if (stat.title?.toLowerCase().includes('attendance')) icon = TrendingUp;
-          if (stat.title?.toLowerCase().includes('course')) icon = BookOpen;
-          return {
-            ...stat,
-            icon,
-            bgColor: stat.color?.includes('blue') ? 'bg-blue-500/10' : stat.color?.includes('purple') ? 'bg-purple-500/10' : stat.color?.includes('orange') ? 'bg-orange-500/10' : 'bg-green-500/10',
-            iconColor: stat.color?.includes('blue') ? 'text-blue-500' : stat.color?.includes('purple') ? 'text-purple-500' : stat.color?.includes('orange') ? 'text-orange-500' : 'text-green-500',
-          };
-        }) || []);
-        setRecentActivity(dashboard.recentActivity?.map((a) => ({
-          ...a,
-          student: a.user || '',
-          action: a.action,
-          time: a.time,
-          icon: a.action?.toLowerCase().includes('grade') ? TrendingUp : a.action?.toLowerCase().includes('assignment') ? ClipboardCheck : a.action?.toLowerCase().includes('question') ? AlertCircle : Bell,
-        })) || []);
-        console.log('Recent Activities:', dashboard.recentActivity?.map((a) => ({
-          ...a,
-          student: a.user || '',
-          action: a.action,
-          time: a.time,
-          icon: a.action?.toLowerCase().includes('grade') ? TrendingUp : a.action?.toLowerCase().includes('assignment') ? ClipboardCheck : a.action?.toLowerCase().includes('question') ? AlertCircle : Bell,
-        })) || []);
-        setTodaysSessions(dashboard.todaysSessions || []);
-        console.log('Today\'s Classes:', dashboard.todaysSessions || []);
-
-        // Notification count
-        if (user?._id) {
-          const notifications = await getNotificationsByUser(user._id);
-          setNotificationCount(Array.isArray(notifications) ? notifications.filter(n => !n.lu).length : 0);
-        }
-      } catch (err) {
-        setError('Failed to load dashboard data.');
+  const loadDashboard = async ({ silent = false } = {}) => {
+    try {
+      if (silent) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
       }
-      setLoading(false);
-    }
-    fetchData();
-  }, [user]);
 
-  const getStatusBadge = (status) => {
-    if (status === 'completed') {
-      return (
-        <span className="px-2 py-1 text-xs font-medium bg-green-500/10 text-green-500 dark:text-green-400 rounded-full flex items-center gap-1 border border-green-500/20">
-          <CheckCircle2 className="h-3 w-3" />
-          Completed
-        </span>
+      setError("");
+
+      // Le backend détecte automatiquement le rôle depuis req.user.
+      // Le paramètre correspond à la période et non au rôle.
+      const dashboard = await getDashboardStats("week");
+
+      if (
+        dashboard?.dashboardType &&
+        dashboard.dashboardType !== "enseignant"
+      ) {
+        throw new Error(
+          `The returned dashboard is not a teacher dashboard (${dashboard.dashboardType}).`
+        );
+      }
+
+      setDashboardData(dashboard || {});
+
+      const currentUserId = user?._id || user?.id;
+
+      if (currentUserId) {
+        try {
+          const notifications = await getNotificationsByUser(currentUserId);
+
+          const unreadCount = Array.isArray(notifications)
+            ? notifications.filter(
+                (notification) =>
+                  notification?.lu === false ||
+                  notification?.read === false
+              ).length
+            : 0;
+
+          setNotificationCount(unreadCount);
+        } catch (notificationError) {
+          console.error(
+            "Failed to load teacher notifications:",
+            notificationError
+          );
+          setNotificationCount(0);
+        }
+      }
+    } catch (err) {
+      console.error("Teacher dashboard error:", err);
+
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Failed to load teacher dashboard data."
       );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    return (
-      <span className="px-2 py-1 text-xs font-medium bg-blue-500/10 text-blue-500 dark:text-blue-400 rounded-full flex items-center gap-1 border border-blue-500/20">
-        <Clock className="h-3 w-3" />
-        Upcoming
-      </span>
-    );
   };
 
-  // Button handlers
+  useEffect(() => {
+    loadDashboard();
+  }, [user?._id, user?.id]);
+
+  const teacher = dashboardData?.teacher || {};
+  const summary = dashboardData?.summary || {};
+
+  const stats = Array.isArray(dashboardData?.stats)
+    ? dashboardData.stats
+    : [];
+
+  const todaysSessions = Array.isArray(dashboardData?.todaysSessions)
+    ? dashboardData.todaysSessions
+    : [];
+
+  const recentActivity = Array.isArray(dashboardData?.recentActivity)
+    ? dashboardData.recentActivity
+    : [];
+
+  const recentNotes = Array.isArray(dashboardData?.recentNotes)
+    ? dashboardData.recentNotes
+    : [];
+
+  const classes = Array.isArray(dashboardData?.classes)
+    ? dashboardData.classes
+    : [];
+
+  const courses = Array.isArray(dashboardData?.courses)
+    ? dashboardData.courses
+    : [];
+
+  const classPerformanceData = Array.isArray(
+    dashboardData?.classPerformanceData
+  )
+    ? dashboardData.classPerformanceData
+    : [];
+
+  const classAttendanceData = Array.isArray(
+    dashboardData?.classAttendanceData
+  )
+    ? dashboardData.classAttendanceData
+    : [];
+
+  const announcements = Array.isArray(dashboardData?.announcements)
+    ? dashboardData.announcements
+    : [];
+
+  const normalizedStats = useMemo(
+    () =>
+      stats.map((stat) => {
+        const Icon = STAT_ICONS[stat?.title] || BarChart3;
+        const color = stat?.color || "from-blue-500 to-violet-500";
+
+        return {
+          ...stat,
+          Icon,
+          color,
+        };
+      }),
+    [stats]
+  );
+
+  const teacherName =
+    teacher?.fullName ||
+    [user?.prenom, user?.nom].filter(Boolean).join(" ") ||
+    "Professor";
+
   const handleLogout = () => {
     logout();
     navigate(ROUTES.LOGIN);
   };
-  const handleViewSchedule = () => navigate(ROUTES.TEACHER_SCHEDULE);
-  const handleTakeAttendance = () => navigate(ROUTES.TEACHER_ATTENDANCE);
-  const handleViewStudents = () => navigate(ROUTES.TEACHER_STUDENTS);
-  const handleGradeAssignments = () => navigate(ROUTES.TEACHER_GRADING);
 
-  if (loading) return <div className="p-8 text-center text-lg">Loading dashboard...</div>;
-  if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
+  const navigateToRoute = (routeKey) => {
+    const route = ROUTES?.[routeKey];
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 p-6">
-      <div className="container mx-auto space-y-6">
-        {/* Enhanced Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 dark:from-blue-400 dark:via-purple-400 dark:to-pink-400 bg-clip-text text-transparent">
-              Teacher Dashboard
-            </h1>
-            <p className="text-slate-600 dark:text-slate-400 mt-2 flex items-center gap-2">
-              <span className="text-lg">Welcome back, {user?.prenom || user?.nom ? `${user?.prenom} ${user?.nom}` : 'Professor'}</span>
-              <span className="text-sm text-slate-400 dark:text-slate-600">•</span>
-              <span className="text-sm text-slate-500 dark:text-slate-500">{new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}</span>
-            </p>
-          </div>
-          
-        </div>
+    if (route) {
+      navigate(route);
+    }
+  };
 
-        {/* Enhanced Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {stats.map((stat, index) => (
-            <Card 
-              key={index} 
-              className="relative overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer border-border"
-            >
-              <div className={`absolute inset-0 bg-gradient-to-br ${stat.color} opacity-5`}></div>
-              <CardContent className="pt-6">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-muted-foreground">
-                      {stat.title}
-                    </p>
-                    <p className="text-3xl font-bold">{stat.value}</p>
-                    <p className="text-xs text-muted-foreground">{stat.change}</p>
-                  </div>
-                  <div className={`h-12 w-12 rounded-xl ${stat.bgColor} flex items-center justify-center`}>
-                    <stat.icon className={`h-6 w-6 ${stat.iconColor}`} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+  const handleTakeAttendance = (event, session) => {
+    event.stopPropagation();
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Today's Classes - Takes 2 columns */}
-          <div className="lg:col-span-2">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-2xl">Today's Classes</CardTitle>
-                    <CardDescription className="mt-1">Your teaching schedule for today</CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm" className="gap-2" onClick={handleViewSchedule}>
-                    <Calendar className="h-4 w-4" />
-                    View Full Schedule
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {todaysSessions.length === 0 ? (
-                    <div className="text-center text-muted-foreground py-8">No classes scheduled for today.</div>
-                  ) : todaysSessions.map((session) => (
-                    <div
-                      key={session.id}
-                      className={`p-4 rounded-xl transition-all duration-300 border-2 ${
-                        selectedClass === session.id
-                          ? 'border-blue-500 bg-blue-500/5 shadow-md'
-                          : 'border-border hover:border-blue-500/50 hover:shadow-md'
-                      }`}
-                      onClick={() => setSelectedClass(session.id)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4 flex-1">
-                          <div className="h-16 w-16 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg flex-shrink-0">
-                            <div className="text-center">
-                              <div className="text-white font-bold text-sm">{session.time.split(' - ')[0]}</div>
-                              <div className="text-white text-xs opacity-90">{session.time.split(' - ')[1]}</div>
-                            </div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <p className="font-semibold text-lg">{session.course}</p>
-                              <span className="px-2 py-1 text-xs font-medium bg-blue-500/10 text-blue-500 dark:text-blue-400 rounded-full border border-blue-500/20">
-                                {session.type}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
-                              <span className="flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                {session.time}
-                              </span>
-                              <span>•</span>
-                              <span>{session.room}</span>
-                              <span>•</span>
-                              <span>{session.class}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <Button
-                          variant="default"
-                          size="sm"
-                          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
-                          onClick={handleTakeAttendance}
-                        >
-                          Take Attendance
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+    if (ROUTES?.TEACHER_ATTENDANCE) {
+      navigate(ROUTES.TEACHER_ATTENDANCE, {
+        state: {
+          session,
+        },
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 px-6">
+        <div className="text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 shadow-xl shadow-blue-500/20">
+            <Loader2 className="h-7 w-7 animate-spin text-white" />
           </div>
 
-          {/* Recent Activity - Takes 1 column */}
-          <div>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-xl">Recent Activity</CardTitle>
-                <CardDescription>Latest updates from your classes</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {recentActivity.length === 0 ? (
-                    <div className="text-center text-muted-foreground py-8">No recent activity.</div>
-                  ) : recentActivity.map((activity, index) => (
-                    <div key={index} className="flex items-start gap-3 pb-4 border-b border-border last:border-b-0 last:pb-0">
-                      <div className="h-10 w-10 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                        <activity.icon className="h-5 w-5 text-blue-500 dark:text-blue-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">{activity.student}</p>
-                        <p className="text-sm text-muted-foreground">{activity.action}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{activity.time}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+          <h2 className="mt-5 text-xl font-bold">
+            Loading teacher dashboard
+          </h2>
 
-        {/* Enhanced Quick Actions */}
-        <div>
-          <h2 className="text-2xl font-bold mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Quick Actions with dynamic counts and handlers */}
-            <Card className="cursor-pointer hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group relative overflow-hidden" onClick={handleGradeAssignments}>
-              <div className={`absolute inset-0 bg-gradient-to-br from-orange-500 to-red-500 opacity-0 group-hover:opacity-10 transition-opacity`}></div>
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center text-center space-y-3">
-                  <div className={`h-16 w-16 rounded-2xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg relative`}>
-                    <ClipboardCheck className="h-8 w-8 text-white" />
-                    {/* Example: Pending grades count (mocked as 0) */}
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg">Grade Assignments</h3>
-                    <p className="text-sm text-muted-foreground mt-1">Review and grade pending submissions</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="cursor-pointer hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group relative overflow-hidden" onClick={handleTakeAttendance}>
-              <div className={`absolute inset-0 bg-gradient-to-br from-blue-500 to-cyan-500 opacity-0 group-hover:opacity-10 transition-opacity`}></div>
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center text-center space-y-3">
-                  <div className={`h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg relative`}>
-                    <Users className="h-8 w-8 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg">Take Attendance</h3>
-                    <p className="text-sm text-muted-foreground mt-1">Mark attendance for today's classes</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="cursor-pointer hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group relative overflow-hidden" onClick={handleViewStudents}>
-              <div className={`absolute inset-0 bg-gradient-to-br from-purple-500 to-pink-500 opacity-0 group-hover:opacity-10 transition-opacity`}></div>
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center text-center space-y-3">
-                  <div className={`h-16 w-16 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg relative`}>
-                    <Users className="h-8 w-8 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg">View Students</h3>
-                    <p className="text-sm text-muted-foreground mt-1">Manage student information and progress</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="cursor-pointer hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group relative overflow-hidden" onClick={handleViewSchedule}>
-              <div className={`absolute inset-0 bg-gradient-to-br from-green-500 to-emerald-500 opacity-0 group-hover:opacity-10 transition-opacity`}></div>
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center text-center space-y-3">
-                  <div className={`h-16 w-16 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg relative`}>
-                    <Calendar className="h-8 w-8 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg">My Schedule</h3>
-                    <p className="text-sm text-muted-foreground mt-1">View weekly teaching schedule</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Preparing your classes, students, and recent activity…
+          </p>
         </div>
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 px-6">
+        <Card className="w-full max-w-lg border-destructive/20 p-8 text-center shadow-xl">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10">
+            <AlertCircle className="h-7 w-7 text-destructive" />
+          </div>
+
+          <h2 className="mt-5 text-2xl font-bold">Dashboard unavailable</h2>
+
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            {error}
+          </p>
+
+          
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
+      <div className="container mx-auto space-y-6 px-4 py-5 sm:px-6 lg:px-8">
+        {/* Hero */}
+        <section className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-blue-700 via-indigo-700 to-violet-700 p-6 text-white shadow-2xl shadow-blue-900/20 sm:p-8">
+          <div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-white/10 blur-2xl" />
+          <div className="absolute -bottom-28 left-1/3 h-64 w-64 rounded-full bg-cyan-300/10 blur-3xl" />
+
+          <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur">
+                <GraduationCap className="h-4 w-4" />
+                Teacher workspace
+              </div>
+
+              <h1 className="max-w-3xl text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
+                Welcome back, {teacherName}
+              </h1>
+
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-blue-100 sm:text-base">
+                Manage your classes, students, attendance, grades, and daily
+                teaching schedule from one place.
+              </p>
+
+              <div className="mt-5 flex flex-wrap items-center gap-3 text-xs text-blue-100 sm:text-sm">
+                <span className="inline-flex items-center gap-2 rounded-full bg-black/10 px-3 py-2 backdrop-blur">
+                  <CalendarDays className="h-4 w-4" />
+                  {new Date().toLocaleDateString(undefined, {
+                    weekday: "long",
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </span>
+
+                <span className="inline-flex items-center gap-2 rounded-full bg-black/10 px-3 py-2 backdrop-blur">
+                  <Bell className="h-4 w-4" />
+                  {notificationCount} unread notifications
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              
+
+              
+            </div>
+          </div>
+        </section>
+
+        {/* KPI cards */}
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {normalizedStats.length > 0 ? (
+            normalizedStats.map((stat, index) => {
+              const Icon = stat.Icon;
+
+              return (
+                <Card
+                  key={stat?.title || index}
+                  className="group relative overflow-hidden border shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-xl"
+                >
+                  <div
+                    className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${stat.color}`}
+                  />
+
+                  <div
+                    className={`absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br ${stat.color} opacity-[0.08] blur-2xl`}
+                  />
+
+                  <CardContent className="relative p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div
+                        className={`flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${stat.color} shadow-lg`}
+                      >
+                        <Icon className="h-6 w-6 text-white" />
+                      </div>
+
+                      {String(stat?.change || "").trim() !== "" && (
+                        <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-600">
+                          ↗ {stat.change}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="mt-6 text-3xl font-black tracking-tight">
+                      {stat?.value ?? 0}
+                    </p>
+
+                    <p className="mt-1 text-sm font-medium text-muted-foreground">
+                      {stat?.title || "Statistic"}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })
+          ) : (
+            <Card className="sm:col-span-2 xl:col-span-4">
+              <CardContent className="p-8 text-center text-muted-foreground">
+                No teacher statistics available.
+              </CardContent>
+            </Card>
+          )}
+        </section>
+
+        {/* Schedule and activity */}
+        <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.85fr)]">
+          <Card className="overflow-hidden border shadow-lg">
+            <CardHeader className="border-b">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <CalendarDays className="h-5 w-5 text-primary" />
+                    Today&apos;s classes
+                  </CardTitle>
+
+                  <CardDescription className="mt-1">
+                    Your active teaching sessions for today
+                  </CardDescription>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() =>
+                    navigateToRoute("TEACHER_SCHEDULE")
+                  }
+                >
+                  View full schedule
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-5">
+              {todaysSessions.length > 0 ? (
+                <div className="space-y-3">
+                  {todaysSessions.map((session, index) => {
+                    const sessionId = session?._id || index;
+                    const isSelected = selectedSession === sessionId;
+
+                    return (
+                      <button
+                        key={sessionId}
+                        type="button"
+                        onClick={() => setSelectedSession(sessionId)}
+                        className={`w-full rounded-2xl border p-4 text-left transition ${
+                          isSelected
+                            ? "border-primary bg-primary/5 shadow-md"
+                            : "border-border hover:border-primary/40 hover:bg-muted/40"
+                        }`}
+                      >
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+                          <div className="flex items-center gap-4 lg:flex-1">
+                            <div className="flex h-16 w-20 shrink-0 flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-lg">
+                              <span className="text-sm font-black">
+                                {session?.startTime || "--:--"}
+                              </span>
+
+                              <span className="text-[11px] text-white/80">
+                                {session?.endTime || "--:--"}
+                              </span>
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="truncate text-lg font-bold">
+                                {session?.courseName || "Course"}
+                              </p>
+
+                              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1">
+                                  <School className="h-3.5 w-3.5" />
+                                  {session?.className || "Class"}
+                                </span>
+
+                                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1">
+                                  <Clock3 className="h-3.5 w-3.5" />
+                                  {session?.startTime || "--:--"} -{" "}
+                                  {session?.endTime || "--:--"}
+                                </span>
+
+                                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1">
+                                  Room {session?.room || "N/A"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="gap-2"
+                            onClick={(event) =>
+                              handleTakeAttendance(event, session)
+                            }
+                          >
+                            <UserCheck className="h-4 w-4" />
+                            Take attendance
+                          </Button>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState
+                  icon={CheckCircle2}
+                  title="No classes scheduled today"
+                  text="Your next teaching session will appear here."
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border shadow-lg">
+            <CardHeader className="border-b">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Activity className="h-5 w-5 text-primary" />
+                Recent activity
+              </CardTitle>
+
+              <CardDescription>
+                Latest updates from your classes
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="p-5">
+              {recentActivity.length > 0 ? (
+                <div className="max-h-[430px] space-y-3 overflow-y-auto pr-1">
+                  {recentActivity.slice(0, 6).map((activity, index) => {
+                    const Icon =
+                      String(activity?.action || "")
+                        .toLowerCase()
+                        .includes("grade")
+                        ? TrendingUp
+                        : String(activity?.action || "")
+                            .toLowerCase()
+                            .includes("attendance")
+                        ? UserCheck
+                        : Bell;
+
+                    return (
+                      <div
+                        key={activity?._id || index}
+                        className="flex items-start gap-3 rounded-2xl border bg-muted/25 p-4"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                          <Icon className="h-5 w-5 text-primary" />
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-bold">
+                            {activity?.action || "Teacher activity"}
+                          </p>
+
+                          <p className="mt-1 truncate text-xs text-muted-foreground">
+                            {activity?.user || ""}
+                          </p>
+
+                          <p className="mt-2 text-[11px] text-muted-foreground">
+                            {activity?.time || "Recently"}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState
+                  icon={Activity}
+                  title="No recent activity"
+                  text="Grades and attendance updates will appear here."
+                />
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Performance and attendance */}
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <MetricCard
+            title="Class performance"
+            description="Average grades for your classes"
+            icon={TrendingUp}
+            data={classPerformanceData}
+            valueKey="average"
+            fallbackColor="#2563eb"
+          />
+
+          <MetricCard
+            title="Class attendance"
+            description="Attendance rate by class"
+            icon={Activity}
+            data={classAttendanceData}
+            valueKey="attendance"
+            fallbackColor="#10b981"
+          />
+        </section>
+
+        {/* Recent notes and announcements */}
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Card className="border shadow-lg">
+            <CardHeader className="border-b">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Award className="h-5 w-5 text-primary" />
+                Recent grades
+              </CardTitle>
+
+              <CardDescription>
+                Latest grades recorded for your students
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="p-5">
+              {recentNotes.length > 0 ? (
+                <div className="space-y-3">
+                  {recentNotes.slice(0, 5).map((note, index) => (
+                    <div
+                      key={note?._id || index}
+                      className="flex items-center gap-4 rounded-2xl border bg-muted/25 p-4"
+                    >
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-500/10">
+                        <Award className="h-5 w-5 text-violet-600" />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-bold">
+                          Student {note?.studentId || "Unknown"}
+                        </p>
+
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {formatDate(note?.date)}
+                        </p>
+                      </div>
+
+                      <span className="rounded-full bg-violet-500/10 px-3 py-1.5 text-sm font-black text-violet-600">
+                        {Number(note?.percentage) || 0}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  icon={Award}
+                  title="No recent grades"
+                  text="Recently created or updated grades will appear here."
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border shadow-lg">
+            <CardHeader className="border-b">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Megaphone className="h-5 w-5 text-primary" />
+                Announcements
+              </CardTitle>
+
+              <CardDescription>
+                Latest school information
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="p-5">
+              {announcements.length > 0 ? (
+                <div className="space-y-3">
+                  {announcements.slice(0, 5).map((announcement, index) => (
+                    <div
+                      key={announcement?._id || index}
+                      className="rounded-2xl border bg-muted/25 p-4"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="text-xl">
+                          {announcement?.icon || "📢"}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold">
+                            {announcement?.title || "Announcement"}
+                          </p>
+
+                          <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">
+                            {announcement?.description || "No description"}
+                          </p>
+
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            {[announcement?.author, announcement?.date]
+                              .filter(Boolean)
+                              .join(" • ")}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  icon={Megaphone}
+                  title="No announcements"
+                  text="School announcements will appear here."
+                />
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Quick actions */}
+        <section>
+          <div className="mb-4">
+            <p className="text-sm font-semibold text-primary">
+              Teacher services
+            </p>
+
+            <h2 className="mt-1 text-2xl font-black">Quick actions</h2>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {QUICK_ACTIONS.map((action) => {
+              const Icon = action.icon;
+
+              return (
+                <button
+                  key={action.title}
+                  type="button"
+                  onClick={() => navigateToRoute(action.routeKey)}
+                  className="group text-left"
+                >
+                  <Card className="relative h-full overflow-hidden border shadow-lg transition duration-300 group-hover:-translate-y-1 group-hover:shadow-xl">
+                    <div
+                      className={`absolute inset-0 bg-gradient-to-br ${action.color} opacity-[0.05]`}
+                    />
+
+                    <CardContent className="relative p-5">
+                      <div
+                        className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${action.color} shadow-lg transition group-hover:scale-110`}
+                      >
+                        <Icon className="h-7 w-7 text-white" />
+                      </div>
+
+                      <h3 className="mt-5 text-lg font-black">
+                        {action.title}
+                      </h3>
+
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        {action.description}
+                      </p>
+
+                      <div className="mt-5 flex items-center justify-between text-sm font-semibold">
+                        <span>Open service</span>
+                        <ChevronRight className="h-4 w-4 transition group-hover:translate-x-1" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+    </main>
   );
 }
-  
+
+function MetricCard({
+  title,
+  description,
+  icon: Icon,
+  data,
+  valueKey,
+  fallbackColor,
+}) {
+  return (
+    <Card className="border shadow-lg">
+      <CardHeader className="border-b">
+        <CardTitle className="flex items-center gap-2 text-xl">
+          <Icon className="h-5 w-5 text-primary" />
+          {title}
+        </CardTitle>
+
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+
+      <CardContent className="p-5">
+        {data.length > 0 ? (
+          <div className="max-h-[340px] space-y-5 overflow-y-auto pr-1">
+            {data.map((item, index) => {
+              const value = Math.max(
+                0,
+                Math.min(100, Number(item?.[valueKey]) || 0)
+              );
+
+              return (
+                <div key={item?.class || index}>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold">
+                        {item?.class || "Unknown class"}
+                      </p>
+
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {value >= 80
+                          ? "Excellent"
+                          : value >= 60
+                          ? "Good"
+                          : "Needs attention"}
+                      </p>
+                    </div>
+
+                    <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-black text-primary">
+                      {value}%
+                    </span>
+                  </div>
+
+                  <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{
+                        width: `${value}%`,
+                        backgroundColor: item?.color || fallbackColor,
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState
+            icon={Icon}
+            title={`No ${title.toLowerCase()} data`}
+            text="This information will appear when data becomes available."
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function EmptyState({ icon: Icon, title, text }) {
+  return (
+    <div className="flex min-h-40 flex-col items-center justify-center rounded-2xl border border-dashed p-6 text-center">
+      <Icon className="h-9 w-9 text-muted-foreground/50" />
+
+      <p className="mt-3 text-sm font-bold">{title}</p>
+
+      <p className="mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
+        {text}
+      </p>
+    </div>
+  );
+}
+
+function formatDate(date) {
+  if (!date) {
+    return "Recently updated";
+  }
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return String(date);
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(parsedDate);
+}

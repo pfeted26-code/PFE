@@ -44,8 +44,10 @@ const Exams = () => {
           return {
             ...exam,
             course: exam.nom || "Unknown Exam",
+            courseName: exam.coursId?.nom || exam.cours?.nom || exam.nom || "Unknown Course",
             code: exam.type || "N/A",
             className: exam.classeId?.nom || "Unknown Class",
+
             status: isCompleted ? "Completed" : "Upcoming",
             grade: note ? calculateGrade(note.score, exam.noteMax) : null,
             score: note ? note.score : null,
@@ -92,6 +94,7 @@ const Exams = () => {
   // Helper function to calculate grade
   const calculateGrade = (score, maxScore) => {
     const percentage = (score / maxScore) * 100;
+
     if (percentage >= 90) return "A";
     if (percentage >= 80) return "B";
     if (percentage >= 70) return "C";
@@ -196,6 +199,10 @@ const Exams = () => {
                       <h3 className="text-xl font-bold mb-2 group-hover:text-primary transition-colors">
                         {exam.course}
                       </h3>
+                      <p className="text-sm font-medium text-muted-foreground mb-3">
+                        {exam.className}
+                      </p>
+
                       <div className="flex flex-wrap items-center gap-2 mb-3">
                         <Badge variant="outline" className="font-mono">{exam.code}</Badge>
                         <Badge variant="secondary">{exam.type}</Badge>
